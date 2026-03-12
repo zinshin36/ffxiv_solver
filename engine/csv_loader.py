@@ -7,36 +7,33 @@ def load_csv(name):
 
     path = os.path.join(GAME_DATA_FOLDER, f"{name}.csv")
 
-    with open(path, newline='', encoding="utf-8") as f:
+    with open(path, encoding="utf8") as f:
         return list(csv.DictReader(f))
 
 
 def load_items():
 
-    items = load_csv("Item")
+    rows = load_csv("Item")
 
-    parsed = []
+    items = []
 
-    for row in items:
+    for r in rows:
 
         try:
-            ilvl = int(row.get("LevelItem", 0))
+            ilvl = int(r.get("LevelItem", 0))
         except:
             continue
 
-        name = row.get("Name", "")
-
-        slot = row.get("EquipSlotCategory", "")
-
-        parsed.append({
-            "name": name,
-            "slot": slot,
+        items.append({
+            "id": r.get("ID"),
+            "name": r.get("Name"),
+            "slot": r.get("EquipSlotCategory"),
             "ilvl": ilvl,
             "materia_slots": 2,
             "stats": {}
         })
 
-    return parsed
+    return items
 
 
 def load_item_params():
@@ -52,14 +49,14 @@ def load_item_params():
         stat = r.get("BaseParam")
 
         try:
-            value = int(r.get("Value", 0))
+            val = int(r.get("Value", 0))
         except:
-            value = 0
+            val = 0
 
         if item not in data:
             data[item] = {}
 
-        data[item][stat] = value
+        data[item][stat] = val
 
     return data
 
@@ -75,12 +72,12 @@ def load_materia():
         stat = r.get("BaseParam")
 
         try:
-            value = int(r.get("Value", 0))
+            val = int(r.get("Value", 0))
         except:
             continue
 
         materia.append({
-            "stats": {stat: value}
+            "stats": {stat: val}
         })
 
     return materia
