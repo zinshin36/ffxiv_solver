@@ -5,10 +5,8 @@ def score(stats):
 
     total = 0
 
-    for stat, weight in STAT_WEIGHTS.items():
+    for s, w in STAT_WEIGHTS.items():
 
-        value = stats.get(stat, 0)
-
-        total += value * weight
+        total += stats.get(s, 0) * w
 
     return total
