@@ -1,7 +1,7 @@
 from config import STAT_WEIGHTS
 
 
-def apply_materia(stats, slots, materia_db):
+def best_materia(stats, slots, materia_db):
 
     if slots == 0:
         return stats
@@ -9,24 +9,25 @@ def apply_materia(stats, slots, materia_db):
     best = None
     best_score = -1
 
-    for materia in materia_db:
+    for m in materia_db:
 
         score = 0
 
-        for stat, value in materia["stats"].items():
+        for s, v in m["stats"].items():
 
-            weight = STAT_WEIGHTS.get(stat, 0)
+            weight = STAT_WEIGHTS.get(s, 0)
 
-            score += value * weight
+            score += v * weight
 
         if score > best_score:
+
             best_score = score
-            best = materia
+            best = m
 
-    new_stats = stats.copy()
+    out = stats.copy()
 
-    for stat, value in best["stats"].items():
+    for s, v in best["stats"].items():
 
-        new_stats[stat] = new_stats.get(stat, 0) + value * slots
+        out[s] = out.get(s, 0) + v * slots
 
-    return new_stats
+    return out
