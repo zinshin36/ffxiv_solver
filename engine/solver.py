@@ -1,46 +1,18 @@
 from itertools import product
-from engine.materia_solver import apply_materia
-from engine.simulator import score
-from config import MAX_RESULTS
+from multiprocessing import Pool
+
+from config import MAX_RESULTS, CPU_WORKERS
+from engine.worker import evaluate
 
 
-def combine_stats(items):
+def solve(slots, materia):
 
-    stats = {}
+    combos = list(product(*slots.values()))
 
-    for item in items:
+    with Pool(CPU_WORKERS) as p:
 
-        for k, v in item.items():
-            stats[k] = stats.get(k, 0) + v
+        results = p.starmap(evaluate, [(c, materia) for c in combos])
 
-    return stats
-
-
-def solve(slot_map, materia_db):
-
-    slot_lists = list(slot_map.values())
-
-    results = []
-
-    for combo in product(*slot_lists):
-
-        stat_list = []
-
-        for item in combo:
-
-            stats = apply_materia(item["stats"], item["materia_slots"], materia_db)
-
-            stat_list.append(stats)
-
-        combined = combine_stats(stat_list)
-
-        dps = score(combined)
-
-        results.append({
-            "gear": combo,
-            "dps": dps
-        })
-
-    results.sort(key=lambda x: x["dps"], reverse=True)
+    results.sort(key=lambda x: x[1], reverse=True)
 
     return results[:MAX_RESULTS]
