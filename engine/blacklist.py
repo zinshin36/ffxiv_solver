@@ -2,9 +2,9 @@ def is_blacklisted(item, blacklist):
 
     name = item["name"].lower()
 
-    for bad in blacklist:
+    for b in blacklist:
 
-        if bad.lower() in name:
+        if b.lower() in name:
             return True
 
     return False
