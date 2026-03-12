@@ -1,11 +1,17 @@
 import csv
 import os
-from config import GAME_DATA_FOLDER
+
+from engine.runtime_paths import GAME_DATA_DIR
 
 
 def load_csv(name):
 
-    path = os.path.join(GAME_DATA_FOLDER, f"{name}.csv")
+    path = os.path.join(GAME_DATA_DIR, f"{name}.csv")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{name}.csv not found in {GAME_DATA_DIR}"
+        )
 
     with open(path, encoding="utf8") as f:
         return list(csv.DictReader(f))
@@ -34,31 +40,6 @@ def load_items():
         })
 
     return items
-
-
-def load_item_params():
-
-    rows = load_csv("ItemBaseParam")
-
-    data = {}
-
-    for r in rows:
-
-        item = r.get("Item")
-
-        stat = r.get("BaseParam")
-
-        try:
-            val = int(r.get("Value", 0))
-        except:
-            val = 0
-
-        if item not in data:
-            data[item] = {}
-
-        data[item][stat] = val
-
-    return data
 
 
 def load_materia():
