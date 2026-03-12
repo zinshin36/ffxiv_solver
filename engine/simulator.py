@@ -1,12 +1,23 @@
-from config import STAT_WEIGHTS
+def score(gear_set):
+    """Compute a simple DPS score using stats including materia."""
+    total = {}
 
+    for item in gear_set.values():
+        for stat, val in item.get("stats", {}).items():
+            total[stat] = total.get(stat, 0) + val
 
-def score(stats):
+    main = total.get("Intelligence", 3000)
+    crit = total.get("CriticalHit", 400)
+    det = total.get("Determination", 400)
+    dh = total.get("DirectHit", 400)
+    ss = total.get("SpellSpeed", 400)
+    wd = total.get("WeaponDamage", 120)
 
-    total = 0
+    crit_mod = 1 + ((crit - 400) / 1900)
+    det_mod = 1 + ((det - 400) / 1900)
+    dh_mod = 1 + ((dh - 400) / 3300)
+    ss_casts = 60 / (2.5 - ((ss - 400) / 1300))
 
-    for s, w in STAT_WEIGHTS.items():
+    potency = 320
 
-        total += stats.get(s, 0) * w
-
-    return total
+    return wd * main * crit_mod * det_mod * dh_mod * potency * ss_casts
