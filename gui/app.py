@@ -1,78 +1,45 @@
 import tkinter as tk
-from tkinter import messagebox
-
+from tkinter import simpledialog, messagebox
 from engine.csv_loader import load_items, load_materia
-from engine.gear_filter import filter_items, group_by_slot
-from engine.solver import solve
-
+from engine.optimizer import top_sets
+from engine.logger import logging
 
 class App:
-
     def __init__(self, root):
-
         self.root = root
-
-        self.blacklist = []
-
         root.title("FFXIV BiS Solver")
 
-        self.entry = tk.Entry(root)
-        self.entry.pack()
+        tk.Button(root, text="Build Top Sets", command=self.build_top_sets).pack(pady=10)
 
-        tk.Button(root, text="Add Blacklist", command=self.add).pack()
-
-        self.listbox = tk.Listbox(root)
-        self.listbox.pack()
-
-        tk.Button(root, text="Run Solver", command=self.run).pack()
-
-        self.output = tk.Text(root, width=80, height=20)
-        self.output.pack()
-
-    def add(self):
-
-        t = self.entry.get()
-
-        if not t:
-            return
-
-        self.blacklist.append(t)
-
-        self.listbox.insert(tk.END, t)
-
-        self.entry.delete(0, tk.END)
-
-    def run(self):
-
-        self.output.delete("1.0", tk.END)
-
+    def build_top_sets(self):
         try:
-
             items = load_items()
-
-            materia = load_materia()
-
-            filtered = filter_items(items, self.blacklist)
-
-            slots = group_by_slot(filtered)
-
-            results = solve(slots, materia)
-
+            materia_list = load_materia()
         except Exception as e:
-
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"Failed to load game data: {e}")
             return
 
-        best = results[0][1]
+        blacklist_input = simpledialog.askstring(
+            "Blacklist",
+            "Enter gear names to blacklist (comma-separated):"
+        )
 
-        for i, (gear, dps) in enumerate(results, 1):
+        blacklist = []
+        if blacklist_input:
+            blacklist = [x.strip() for x in blacklist_input.split(",")]
 
-            diff = best - dps
+        top10 = top_sets(items, materia_list, blacklist=blacklist)
 
-            self.output.insert(tk.END, f"\nRank {i}\n")
-            self.output.insert(tk.END, f"DPS {dps}\n")
-            self.output.insert(tk.END, f"Loss {diff}\n")
+        if not top10:
+            messagebox.showinfo("Result", "No gear sets found.")
+            return
 
-            for g in gear:
+        output = ""
+        best_dps = top10[0]["dps"]
+        for i, s in enumerate(top10):
+            output += f"Set {i+1} | DPS {s['dps']:.2f} | Diff {best_dps - s['dps']:.2f}\n"
+            for item in s["gear"].values():
+                output += f"  {item['name']} (i{item['ilvl']}) Materia:{item.get('MateriaApplied',0)}\n"
+            output += "\n"
 
-                self.output.insert(tk.END, f"  {g['name']}\n")
+        messagebox.showinfo("Top Sets", output)
