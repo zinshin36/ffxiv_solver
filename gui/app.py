@@ -11,64 +11,45 @@ class App:
     def __init__(self, root):
 
         self.root = root
-        self.root.title("FFXIV Gear Solver")
 
         self.blacklist = []
 
-        self.box = tk.Listbox(root, width=40)
-        self.box.pack()
+        root.title("FFXIV BiS Solver")
 
-        entry_frame = tk.Frame(root)
-        entry_frame.pack()
+        self.entry = tk.Entry(root)
+        self.entry.pack()
 
-        self.entry = tk.Entry(entry_frame, width=30)
-        self.entry.pack(side=tk.LEFT)
+        tk.Button(root, text="Add Blacklist", command=self.add).pack()
 
-        add = tk.Button(entry_frame, text="Add", command=self.add_blacklist)
-        add.pack(side=tk.LEFT)
+        self.listbox = tk.Listbox(root)
+        self.listbox.pack()
 
-        remove = tk.Button(root, text="Remove Selected", command=self.remove_blacklist)
-        remove.pack()
-
-        run = tk.Button(root, text="Run Solver", command=self.run_solver)
-        run.pack()
+        tk.Button(root, text="Run Solver", command=self.run).pack()
 
         self.output = tk.Text(root, width=80, height=20)
         self.output.pack()
 
-    def add_blacklist(self):
+    def add(self):
 
-        text = self.entry.get()
+        t = self.entry.get()
 
-        if not text:
+        if not t:
             return
 
-        self.blacklist.append(text)
+        self.blacklist.append(t)
 
-        self.box.insert(tk.END, text)
+        self.listbox.insert(tk.END, t)
 
         self.entry.delete(0, tk.END)
 
-    def remove_blacklist(self):
-
-        sel = self.box.curselection()
-
-        if not sel:
-            return
-
-        idx = sel[0]
-
-        self.box.delete(idx)
-
-        del self.blacklist[idx]
-
-    def run_solver(self):
+    def run(self):
 
         self.output.delete("1.0", tk.END)
 
         try:
 
             items = load_items()
+
             materia = load_materia()
 
             filtered = filter_items(items, self.blacklist)
@@ -82,15 +63,16 @@ class App:
             messagebox.showerror("Error", str(e))
             return
 
-        best = results[0]["dps"]
+        best = results[0][1]
 
-        for i, r in enumerate(results, 1):
+        for i, (gear, dps) in enumerate(results, 1):
 
-            diff = best - r["dps"]
+            diff = best - dps
 
             self.output.insert(tk.END, f"\nRank {i}\n")
-            self.output.insert(tk.END, f"DPS {r['dps']:.2f}\n")
-            self.output.insert(tk.END, f"Loss {diff:.2f}\n")
+            self.output.insert(tk.END, f"DPS {dps}\n")
+            self.output.insert(tk.END, f"Loss {diff}\n")
 
-            for g in r["gear"]:
+            for g in gear:
+
                 self.output.insert(tk.END, f"  {g['name']}\n")
