@@ -8,7 +8,7 @@ def filter_items(items, blacklist):
 
     cutoff = max_ilvl - ILVL_WINDOW
 
-    filtered = []
+    out = []
 
     for item in items:
 
@@ -18,22 +18,22 @@ def filter_items(items, blacklist):
         if is_blacklisted(item, blacklist):
             continue
 
-        filtered.append(item)
+        out.append(item)
 
-    return filtered
+    return out
 
 
 def group_by_slot(items):
 
     slots = {}
 
-    for item in items:
+    for i in items:
 
-        slot = item["slot"]
+        slot = i["slot"]
 
         if slot not in slots:
             slots[slot] = []
 
-        slots[slot].append(item)
+        slots[slot].append(i)
 
     return slots
