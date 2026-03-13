@@ -1,40 +1,21 @@
-import csv
+# engine/csv_loader.py
 import os
-from engine.runtime_paths import GAME_DATA_DIR
+import csv
+from engine.logger import log
+
+GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
 def load_csv(filename):
     path = os.path.join(GAME_DATA_DIR, f"{filename}.csv")
     if not os.path.exists(path):
         raise FileNotFoundError(f"{filename}.csv not found in {GAME_DATA_DIR}")
-    with open(path, encoding="utf8") as f:
-        return list(csv.DictReader(f))
+    rows = []
+    with open(path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(row)
+    log(f"Loaded {len(rows)} rows from {filename}.csv")
+    return rows
 
 def load_items():
-    rows = load_csv("Item")
-    items = []
-    for r in rows:
-        try:
-            ilvl = int(r.get("LevelItem", 0))
-        except:
-            continue
-        items.append({
-            "id": r.get("ID"),
-            "name": r.get("Name"),
-            "slot": r.get("EquipSlotCategory"),
-            "ilvl": ilvl,
-            "materia_slots": int(r.get("MateriaSlots", 0)),
-            "stats": {}
-        })
-    return items
-
-def load_materia():
-    rows = load_csv("Materia")
-    materia = []
-    for r in rows:
-        stat = r.get("BaseParam")
-        try:
-            val = int(r.get("Value", 0))
-        except:
-            continue
-        materia.append({"stats": {stat: val}})
-    return materia
+    return load_csv("Item")
