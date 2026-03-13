@@ -1,27 +1,25 @@
 # engine/simulator.py
 def simulate_dps(gear_set):
     """
-    Calculates DPS for a gear set.
-    `gear_set` is a dict of item dicts with stats:
-    {'Intelligence': int, 'CriticalHit': int, 'Determination': int, 'DirectHit': int, 'SpellSpeed': int, 'WeaponDamage': int}
+    Simple DPS simulation using stats from gear_set.
+    Each item in gear_set is a dict with 'stats' dictionary.
     """
-    total_stats = {}
+    total = {}
     for item in gear_set.values():
         for stat, val in item.get("stats", {}).items():
-            total_stats[stat] = total_stats.get(stat, 0) + val
+            total[stat] = total.get(stat, 0) + int(val)
 
-    main = total_stats.get("Intelligence", 3000)
-    crit = total_stats.get("CriticalHit", 400)
-    det = total_stats.get("Determination", 400)
-    dh = total_stats.get("DirectHit", 400)
-    ss = total_stats.get("SpellSpeed", 400)
-    wd = total_stats.get("WeaponDamage", 120)
+    main = total.get("Intelligence", 3000)
+    crit = total.get("CriticalHit", 400)
+    det = total.get("Determination", 400)
+    dh = total.get("DirectHit", 400)
+    ss = total.get("SpellSpeed", 400)
+    wd = total.get("WeaponDamage", 120)
 
     crit_mod = 1 + ((crit - 400) / 1900)
     det_mod = 1 + ((det - 400) / 1900)
     dh_mod = 1 + ((dh - 400) / 3300)
     ss_casts = 60 / (2.5 - ((ss - 400) / 1300))
-
     potency = 320
 
     return wd * main * crit_mod * det_mod * dh_mod * potency * ss_casts
