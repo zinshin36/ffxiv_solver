@@ -1,17 +1,21 @@
-def score(gear_set):
-    """Compute a DPS score using stats including materia."""
-    total = {}
-
+# engine/simulator.py
+def simulate_dps(gear_set):
+    """
+    Calculates DPS for a gear set.
+    `gear_set` is a dict of item dicts with stats:
+    {'Intelligence': int, 'CriticalHit': int, 'Determination': int, 'DirectHit': int, 'SpellSpeed': int, 'WeaponDamage': int}
+    """
+    total_stats = {}
     for item in gear_set.values():
         for stat, val in item.get("stats", {}).items():
-            total[stat] = total.get(stat, 0) + val
+            total_stats[stat] = total_stats.get(stat, 0) + val
 
-    main = total.get("Intelligence", 3000)
-    crit = total.get("CriticalHit", 400)
-    det = total.get("Determination", 400)
-    dh = total.get("DirectHit", 400)
-    ss = total.get("SpellSpeed", 400)
-    wd = total.get("WeaponDamage", 120)
+    main = total_stats.get("Intelligence", 3000)
+    crit = total_stats.get("CriticalHit", 400)
+    det = total_stats.get("Determination", 400)
+    dh = total_stats.get("DirectHit", 400)
+    ss = total_stats.get("SpellSpeed", 400)
+    wd = total_stats.get("WeaponDamage", 120)
 
     crit_mod = 1 + ((crit - 400) / 1900)
     det_mod = 1 + ((det - 400) / 1900)
