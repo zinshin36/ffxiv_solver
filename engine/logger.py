@@ -1,23 +1,20 @@
-import logging
+# engine/logger.py
 import os
 from datetime import datetime
-from engine.runtime_paths import LOG_DIR
 
-def setup_logger():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logfile = os.path.join(LOG_DIR, f"run_{timestamp}.log")
+# Log everything inside the folder you are running in
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(logfile, encoding="utf-8"),
-            logging.StreamHandler()
-        ]
-    )
+log_file = os.path.join(LOG_DIR, f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
 
-    logging.info("===================================")
-    logging.info("Application Started")
-    logging.info(f"Log file: {logfile}")
-    return logfile
+def log(message: str):
+    """
+    Logs a message to the log file and prints it to the console.
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} [INFO] {message}"
+    print(line)
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
