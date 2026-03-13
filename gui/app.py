@@ -8,7 +8,6 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title("FFXIV BiS Solver")
-
         tk.Button(root, text="Build Top Sets", command=self.build_top_sets).pack(pady=10)
 
     def build_top_sets(self):
