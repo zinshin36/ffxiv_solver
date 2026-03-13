@@ -18,11 +18,9 @@ def top_sets(items, materia_list, blacklist=None, ilvl_window=25, top_n=10):
 
     items = filter_blacklist(items, blacklist)
 
-    # remove anything more than ilvl_window below max
     max_ilvl = max(i["ilvl"] for i in items)
     items = [i for i in items if i["ilvl"] >= max_ilvl - ilvl_window]
 
-    # group by slot
     slots = {}
     for i in items:
         slots.setdefault(i["slot"], []).append(i)
@@ -38,6 +36,5 @@ def top_sets(items, materia_list, blacklist=None, ilvl_window=25, top_n=10):
         dps = score(gear_set)
         results.append({"gear": gear_set, "dps": dps})
 
-    # sort top N
     results.sort(key=lambda x: x["dps"], reverse=True)
     return results[:top_n]
