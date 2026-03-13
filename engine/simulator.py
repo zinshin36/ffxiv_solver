@@ -1,5 +1,5 @@
 def score(gear_set):
-    """Compute a simple DPS score using stats including materia."""
+    """Compute a DPS score using stats including materia."""
     total = {}
 
     for item in gear_set.values():
