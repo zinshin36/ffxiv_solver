@@ -5,6 +5,10 @@ from engine.logger import log
 GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
 
+# --------------------------------------------------
+# GENERIC CSV LOADER
+# --------------------------------------------------
+
 def load_csv(name):
 
     path = os.path.join(GAME_DATA_DIR, f"{name}.csv")
@@ -20,6 +24,16 @@ def load_csv(name):
     return rows
 
 
+def get_id(row):
+
+    return (
+        row.get("#")
+        or row.get("RowId")
+        or row.get("Key")
+        or row.get("ID")
+    )
+
+
 # --------------------------------------------------
 # BASE PARAM MAP
 # --------------------------------------------------
@@ -32,8 +46,9 @@ def load_base_params():
 
     for r in rows:
 
-        key = r.get("#") or r.get("RowId") or r.get("Key")
-        name = r.get("Name")
+        key = get_id(r)
+
+        name = r.get("Name") or r.get("Text")
 
         if key and name:
             mapping[str(key)] = name
@@ -44,26 +59,7 @@ def load_base_params():
 
 
 # --------------------------------------------------
-# ITEM LEVEL
-# --------------------------------------------------
-
-def load_item_levels():
-
-    rows = load_csv("ItemLevel")
-
-    levels = {}
-
-    for r in rows:
-
-        key = r.get("#") or r.get("RowId")
-
-        levels[str(key)] = r
-
-    return levels
-
-
-# --------------------------------------------------
-# EQUIP SLOT
+# SLOT MAP
 # --------------------------------------------------
 
 def load_slots():
@@ -74,15 +70,16 @@ def load_slots():
 
     for r in rows:
 
-        key = r.get("#") or r.get("RowId")
+        key = get_id(r)
 
-        slots[str(key)] = r
+        if key:
+            slots[str(key)] = r
 
     return slots
 
 
 # --------------------------------------------------
-# CLASS JOB CATEGORY
+# JOB MAP
 # --------------------------------------------------
 
 def load_jobs():
@@ -93,25 +90,53 @@ def load_jobs():
 
     for r in rows:
 
-        key = r.get("#") or r.get("RowId")
+        key = get_id(r)
 
-        jobs[str(key)] = r
+        if key:
+            jobs[str(key)] = r
 
     return jobs
 
 
 # --------------------------------------------------
-# EXTRACT ITEM STATS
+# ITEM LEVEL MAP
+# --------------------------------------------------
+
+def load_item_levels():
+
+    rows = load_csv("ItemLevel")
+
+    levels = {}
+
+    for r in rows:
+
+        key = get_id(r)
+
+        if key:
+            levels[str(key)] = r
+
+    return levels
+
+
+# --------------------------------------------------
+# ITEM STAT EXTRACTION
 # --------------------------------------------------
 
 def extract_stats(item, base_params):
 
     stats = {}
 
-    for i in range(6):
+    for i in range(10):
 
-        param = item.get(f"BaseParam[{i}]") or item.get(f"BaseParam{i}")
-        value = item.get(f"BaseParamValue[{i}]") or item.get(f"BaseParamValue{i}")
+        param = (
+            item.get(f"BaseParam[{i}]")
+            or item.get(f"BaseParam{i}")
+        )
+
+        value = (
+            item.get(f"BaseParamValue[{i}]")
+            or item.get(f"BaseParamValue{i}")
+        )
 
         if not param or not value:
             continue
@@ -138,9 +163,9 @@ def load_items():
     items = load_csv("Item")
 
     base_params = load_base_params()
-    slots = load_slots()
-    jobs = load_jobs()
-    item_levels = load_item_levels()
+    load_slots()
+    load_jobs()
+    load_item_levels()
 
     parsed = []
 
@@ -153,9 +178,15 @@ def load_items():
 
         stats = extract_stats(item, base_params)
 
-        key = item.get("#") or item.get("RowId")
+        if not stats:
+            continue
 
-        ilvl = int(item.get("LevelItem", 0))
+        ilvl = item.get("LevelItem")
+
+        try:
+            ilvl = int(ilvl)
+        except:
+            ilvl = 0
 
         parsed.append({
             "Name": name,
@@ -184,9 +215,12 @@ def load_materia():
 
     for p in param_rows:
 
-        key = p.get("#") or p.get("RowId")
+        key = get_id(p)
 
-        param_map[str(key)] = p.get("BaseParam")
+        stat = p.get("BaseParam")
+
+        if key and stat:
+            param_map[str(key)] = stat
 
     materia = []
 
@@ -200,6 +234,9 @@ def load_materia():
             value = int(m.get("Value", 0))
         except:
             value = 0
+
+        if not stat:
+            continue
 
         materia.append({
             "name": m.get("Name"),
