@@ -1,11 +1,11 @@
 import tkinter as tk
 
-from engine.csv_loader import load_items, load_materia
-from engine.optimizer import top_sets
+from engine.gear_database import load_items
+from engine.optimizer import solve
 from engine.logger import log
 
 
-class SolverGUI:
+class App:
 
     def __init__(self, root):
 
@@ -15,37 +15,34 @@ class SolverGUI:
         frame.pack()
 
         tk.Label(frame, text="Target GCD").grid(row=0, column=0)
+        self.gcd = tk.Entry(frame)
+        self.gcd.insert(0, "2.38")
+        self.gcd.grid(row=0, column=1)
 
-        self.gcd_entry = tk.Entry(frame)
-        self.gcd_entry.insert(0, "2.38")
-        self.gcd_entry.grid(row=0, column=1)
+        tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
+        self.ilvl = tk.Entry(frame)
+        self.ilvl.insert(0, "600")
+        self.ilvl.grid(row=1, column=1)
 
         run = tk.Button(frame, text="Run Solver", command=self.run)
-        run.grid(row=1, column=0, columnspan=2)
+        run.grid(row=2, column=0, columnspan=2)
 
         log("Application started")
 
     def run(self):
 
-        try:
-            target = float(self.gcd_entry.get())
-        except:
-            target = None
+        target = float(self.gcd.get())
+        min_ilvl = int(self.ilvl.get())
 
-        log(f"Target GCD: {target}")
+        items = load_items(min_ilvl)
+        materia = []  # placeholder until materia loader added
 
-        items = load_items()
-        materia = load_materia()
-
-        top_sets(items, materia, target)
+        solve(items, materia, target)
 
 
 def main():
-
     root = tk.Tk()
-
-    SolverGUI(root)
-
+    App(root)
     root.mainloop()
 
 
