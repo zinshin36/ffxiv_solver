@@ -1,16 +1,18 @@
 from itertools import product
-from engine.materia_solver import meld_item
-from engine.blm_math import gcd_score
+
+from engine.materia_system import meld_item
+from engine.food_system import apply_food
+from engine.blm_math import gcd_bonus
 from engine.logger import solver_log
 
 
-def score(stats, target_gcd):
+def stat_score(stats, target_gcd):
 
+    main = stats.get("Intelligence", 0)
     crit = stats.get("CriticalHit", 0)
     det = stats.get("Determination", 0)
     dh = stats.get("DirectHitRate", 0)
     sps = stats.get("SpellSpeed", 0)
-    main = stats.get("Intelligence", 0)
 
     value = (
         main * 1.0 +
@@ -20,29 +22,30 @@ def score(stats, target_gcd):
         sps * 0.25
     )
 
-    value += gcd_score(sps, target_gcd)
+    value += gcd_bonus(sps, target_gcd)
 
     return value
 
 
-def solve(items, materia, target_gcd):
+def solve(items, materia, target_gcd, food):
 
     slots = {}
 
-    for item in items:
-        slots.setdefault(item["slot"], []).append(item)
+    for i in items:
+        slots.setdefault(i["slot"], []).append(i)
 
     for s in slots:
+
         slots[s] = sorted(
             slots[s],
-            key=lambda x: score(x["stats"], target_gcd),
+            key=lambda x: stat_score(x["stats"], target_gcd),
             reverse=True
         )[:6]
 
-    slot_lists = list(slots.values())
-
+    best = None
     best_score = 0
-    best_set = None
+
+    slot_lists = list(slots.values())
 
     for combo in product(*slot_lists):
 
@@ -50,24 +53,28 @@ def solve(items, materia, target_gcd):
         melds = []
 
         for item in combo:
+
             stats, m = meld_item(item, materia)
-            melds.append((item["Name"], m))
+
+            melds.append((item["name"], m))
 
             for k, v in stats.items():
                 merged[k] = merged.get(k, 0) + v
 
-        s = score(merged, target_gcd)
+        merged = apply_food(merged, food)
 
-        if s > best_score:
-            best_score = s
-            best_set = (combo, melds, merged)
+        score = stat_score(merged, target_gcd)
 
-    combo, melds, stats = best_set
+        if score > best_score:
+            best_score = score
+            best = (combo, melds, merged)
+
+    combo, melds, stats = best
 
     solver_log("BEST SET")
 
     for item in combo:
-        solver_log(f"{item['slot']} : {item['Name']}")
+        solver_log(f"{item['slot']} : {item['name']}")
 
     solver_log("STATS")
 
