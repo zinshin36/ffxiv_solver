@@ -1,54 +1,48 @@
 import tkinter as tk
 
 from engine.csv_loader import load_items, load_materia
-from engine.optimizer import top_sets
+from engine.optimizer import solve
 from engine.logger import log
 
 
-class SolverGUI:
+class App:
 
     def __init__(self, root):
 
-        self.root = root
-        root.title("FFXIV BLM Gear Solver")
+        root.title("BLM Gear Solver")
 
         frame = tk.Frame(root, padx=10, pady=10)
         frame.pack()
 
         tk.Label(frame, text="Target GCD").grid(row=0, column=0)
 
-        self.gcd_entry = tk.Entry(frame, width=10)
-        self.gcd_entry.insert(0, "2.38")
-        self.gcd_entry.grid(row=0, column=1)
+        self.gcd = tk.Entry(frame)
+        self.gcd.insert(0, "2.38")
+        self.gcd.grid(row=0, column=1)
 
-        run_button = tk.Button(
-            frame,
-            text="Run Solver",
-            command=self.run_solver
-        )
+        run = tk.Button(frame, text="Run Solver", command=self.run)
+        run.grid(row=1, column=0, columnspan=2)
 
-        run_button.grid(row=1, column=0, columnspan=2, pady=10)
-
-    def run_solver(self):
+    def run(self):
 
         try:
-            target_gcd = float(self.gcd_entry.get())
+            target = float(self.gcd.get())
         except:
-            target_gcd = None
+            target = None
 
-        log("Running solver...")
+        log("Solver started")
 
         items = load_items()
         materia = load_materia()
 
-        top_sets(items, materia, target_gcd)
+        solve(items, materia, target)
 
 
 def main():
 
     root = tk.Tk()
 
-    SolverGUI(root)
+    App(root)
 
     root.mainloop()
 
