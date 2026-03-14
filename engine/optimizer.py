@@ -5,7 +5,7 @@ from engine.blm_math import gcd_bonus
 from engine.materia_solver import meld_item
 
 
-def score(stats):
+def score(stats, target_gcd):
 
     crit = stats.get("CriticalHit",0)
     det = stats.get("Determination",0)
@@ -21,12 +21,12 @@ def score(stats):
         sps*0.25
     )
 
-    value += gcd_bonus(sps)
+    value += gcd_bonus(sps, target_gcd)
 
     return value
 
 
-def top_sets(items, materia):
+def top_sets(items, materia, target_gcd):
 
     slots = {}
 
@@ -37,7 +37,7 @@ def top_sets(items, materia):
 
         slots[s] = sorted(
             slots[s],
-            key=lambda x: score(x["stats"]),
+            key=lambda x: score(x["stats"], target_gcd),
             reverse=True
         )[:6]
 
@@ -46,6 +46,7 @@ def top_sets(items, materia):
     best_score = 0
     best_set = None
     best_melds = None
+    best_stats = None
 
     for combo in product(*slot_lists):
 
@@ -61,13 +62,14 @@ def top_sets(items, materia):
             for k,v in stats.items():
                 total[k] = total.get(k,0) + v
 
-        s = score(total)
+        s = score(total, target_gcd)
 
         if s > best_score:
 
             best_score = s
             best_set = combo
             best_melds = melds
+            best_stats = total
 
     log("====== BEST BLM SET ======")
 
@@ -79,6 +81,11 @@ def top_sets(items, materia):
 
         for m in meld:
             log(f"   + {m['name']} ({m['stat']} +{m['value']})")
+
+    log("------ TOTAL STATS ------")
+
+    for k,v in best_stats.items():
+        log(f"{k}: {v}")
 
     log(f"Score: {best_score}")
 
