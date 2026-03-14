@@ -1,10 +1,10 @@
 import os
 from datetime import datetime
 
+os.makedirs("logs", exist_ok=True)
+
 LOG_FILE = "logs/app.log"
 CSV_LOG = "logs/csv_debug.log"
-
-os.makedirs("logs", exist_ok=True)
 
 
 def log(msg):
