@@ -5,6 +5,10 @@ from engine.logger import log, csv_log
 GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
 
+# -------------------------------
+# CSV LOADER
+# -------------------------------
+
 def load_csv(name):
 
     path = os.path.join(GAME_DATA_DIR, f"{name}.csv")
@@ -16,7 +20,6 @@ def load_csv(name):
 
         reader = csv.DictReader(f)
         rows = list(reader)
-
         headers = reader.fieldnames
 
     log(f"{name}.csv loaded ({len(rows)} rows)")
@@ -29,19 +32,19 @@ def load_csv(name):
     return rows
 
 
-def get(row, column):
+def get(row, col):
 
-    return row.get(column) or row.get(str(column))
+    return row.get(str(col))
 
 
 def get_id(row):
 
-    return get(row, "key")
+    return row.get("key")
 
 
-# --------------------------------------------------
-# BASE PARAM
-# --------------------------------------------------
+# -------------------------------
+# BASE PARAMS
+# -------------------------------
 
 def load_base_params():
 
@@ -52,7 +55,6 @@ def load_base_params():
     for r in rows:
 
         key = get_id(r)
-
         name = get(r, 0)
 
         if key and name:
@@ -63,15 +65,51 @@ def load_base_params():
     return mapping
 
 
-# --------------------------------------------------
+# -------------------------------
+# STAT COLUMN DETECTION
+# -------------------------------
+
+def detect_stat_columns(items, base_params):
+
+    stat_columns = {}
+
+    sample = items[:500]
+
+    for col in range(0, 120):
+
+        values = set()
+
+        for row in sample:
+
+            v = get(row, col)
+
+            if v and v.isdigit():
+                values.add(v)
+
+        for v in values:
+
+            if v in base_params:
+
+                stat_columns[col] = base_params[v]
+
+    csv_log("Detected stat columns:")
+    for c, s in stat_columns.items():
+        csv_log(f"Column {c} -> {s}")
+
+    return stat_columns
+
+
+# -------------------------------
 # ITEM PARSER
-# --------------------------------------------------
+# -------------------------------
 
 def load_items():
 
     items = load_csv("Item")
 
     base_params = load_base_params()
+
+    stat_columns = detect_stat_columns(items, base_params)
 
     parsed = []
 
@@ -91,32 +129,19 @@ def load_items():
 
         stats = {}
 
-        # BaseParam indexes (Godbert export)
-        stat_pairs = [
-            (68, 69),
-            (70, 71),
-            (72, 73),
-            (74, 75),
-            (76, 77),
-        ]
+        for col, stat in stat_columns.items():
 
-        for param_col, value_col in stat_pairs:
-
-            param = get(item, param_col)
-            value = get(item, value_col)
-
-            if not param or not value:
-                continue
-
-            stat_name = base_params.get(str(param))
-
-            if not stat_name:
-                continue
+            value = get(item, col)
 
             try:
-                stats[stat_name] = int(value)
+                value = int(value)
             except:
                 continue
+
+            if value <= 0:
+                continue
+
+            stats[stat] = value
 
         if not stats:
             continue
@@ -124,7 +149,7 @@ def load_items():
         parsed.append({
             "Name": name,
             "LevelItem": ilvl,
-            "stats": stats,
+            "stats": stats
         })
 
     log(f"Items parsed ({len(parsed)})")
@@ -132,9 +157,9 @@ def load_items():
     return parsed
 
 
-# --------------------------------------------------
+# -------------------------------
 # MATERIA
-# --------------------------------------------------
+# -------------------------------
 
 def load_materia():
 
