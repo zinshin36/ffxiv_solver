@@ -6,9 +6,6 @@ from engine.blm_math import gcd_score
 
 
 def score(stats, target_gcd):
-    """
-    Weighted stat scoring for BLM
-    """
 
     crit = stats.get("CriticalHit", 0)
     det = stats.get("Determination", 0)
@@ -29,136 +26,63 @@ def score(stats, target_gcd):
     return value
 
 
-def build_slot_map(items):
-    """
-    Groups items by equipment slot
-    """
+def top_sets(items, materia, target_gcd):
 
     slots = {}
 
     for item in items:
-        slot = item.get("slot")
+        slots.setdefault(item["slot"], []).append(item)
 
-        if not slot:
-            continue
+    for s in slots:
 
-        slots.setdefault(slot, []).append(item)
-
-    return slots
-
-
-def prune_candidates(slots, target_gcd):
-    """
-    Keeps only the top scoring candidates per slot
-    to keep the solver fast.
-    """
-
-    pruned = {}
-
-    for slot, items in slots.items():
-
-        items_sorted = sorted(
-            items,
+        slots[s] = sorted(
+            slots[s],
             key=lambda x: score(x["stats"], target_gcd),
             reverse=True
-        )
-
-        # keep top 6 per slot
-        pruned[slot] = items_sorted[:6]
-
-    return pruned
-
-
-def merge_stats(base, add):
-
-    for k, v in add.items():
-        base[k] = base.get(k, 0) + v
-
-
-def top_sets(items, materia, target_gcd=None):
-    """
-    Main solver entry point
-    """
-
-    if not items:
-        log("No items provided to solver")
-        return None
-
-    if not materia:
-        log("No materia available")
-        return None
-
-    slots = build_slot_map(items)
-
-    if not slots:
-        log("No slot data found")
-        return None
-
-    slots = prune_candidates(slots, target_gcd)
+        )[:6]
 
     slot_lists = list(slots.values())
 
-    best_score = -1
-    best_combo = None
+    best_score = 0
+    best_set = None
     best_melds = None
     best_stats = None
 
-    tested = 0
-
     for combo in product(*slot_lists):
 
-        merged_stats = {}
-        meld_info = []
+        merged = {}
+        melds = []
 
         for item in combo:
 
-            melded_stats, melds = meld_item(item, materia)
+            stats, m = meld_item(item, materia)
 
-            meld_info.append((item["Name"], melds))
+            melds.append((item["Name"], m))
 
-            merge_stats(merged_stats, melded_stats)
+            for k, v in stats.items():
+                merged[k] = merged.get(k, 0) + v
 
-        s = score(merged_stats, target_gcd)
-
-        tested += 1
+        s = score(merged, target_gcd)
 
         if s > best_score:
 
             best_score = s
-            best_combo = combo
-            best_melds = meld_info
-            best_stats = merged_stats
+            best_set = combo
+            best_melds = melds
+            best_stats = merged
 
-    log(f"Solver tested {tested} combinations")
-
-    if not best_combo:
-        log("Solver found no valid gear set")
-        return None
-
-    log("")
     log("====== BEST BLM SET ======")
-    log("")
 
-    for item in best_combo:
+    for item in best_set:
 
         log(f"{item['slot']} : {item['Name']}")
 
-        melds = next(m for n, m in best_melds if n == item["Name"])
+        meld = next(m for n, m in best_melds if n == item["Name"])
 
-        for m in melds:
-            log(f"   + {m['name']} ({m['stat']} +{m['value']})")
+        for m in meld:
+            log(f"   + {m['name']} {m['stat']} +{m['value']}")
 
-        if not melds:
-            log("   (no materia)")
+    log("---- TOTAL STATS ----")
 
-    log("")
-    log("------ TOTAL STATS ------")
-
-    for stat, value in best_stats.items():
-        log(f"{stat}: {value}")
-
-    log("")
-    log(f"FINAL SCORE: {best_score}")
-    log("")
-
-    return best_combo
+    for k, v in best_stats.items():
+        log(f"{k}: {v}")
