@@ -5,10 +5,6 @@ from engine.logger import log, csv_log
 GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
 
-# -------------------------------
-# CSV LOADER
-# -------------------------------
-
 def load_csv(name):
 
     path = os.path.join(GAME_DATA_DIR, f"{name}.csv")
@@ -33,18 +29,16 @@ def load_csv(name):
 
 
 def get(row, col):
-
     return row.get(str(col))
 
 
 def get_id(row):
-
     return row.get("key")
 
 
-# -------------------------------
-# BASE PARAMS
-# -------------------------------
+# ---------------------------
+# BASE PARAM
+# ---------------------------
 
 def load_base_params():
 
@@ -65,51 +59,60 @@ def load_base_params():
     return mapping
 
 
-# -------------------------------
-# STAT COLUMN DETECTION
-# -------------------------------
+# ---------------------------
+# SLOT CATEGORY
+# ---------------------------
 
-def detect_stat_columns(items, base_params):
+def load_slots():
 
-    stat_columns = {}
+    rows = load_csv("EquipSlotCategory")
 
-    sample = items[:500]
+    slots = {}
 
-    for col in range(0, 120):
+    for r in rows:
 
-        values = set()
+        key = get_id(r)
 
-        for row in sample:
+        name = get(r, 0)
 
-            v = get(row, col)
+        if key:
+            slots[key] = name
 
-            if v and v.isdigit():
-                values.add(v)
-
-        for v in values:
-
-            if v in base_params:
-
-                stat_columns[col] = base_params[v]
-
-    csv_log("Detected stat columns:")
-    for c, s in stat_columns.items():
-        csv_log(f"Column {c} -> {s}")
-
-    return stat_columns
+    return slots
 
 
-# -------------------------------
-# ITEM PARSER
-# -------------------------------
+# ---------------------------
+# JOB CATEGORY
+# ---------------------------
 
-def load_items():
+def load_job_categories():
+
+    rows = load_csv("ClassJobCategory")
+
+    jobs = {}
+
+    for r in rows:
+
+        key = get_id(r)
+
+        # column 33 = Black Mage flag
+        if get(r, 33) == "1":
+            jobs[key] = True
+
+    return jobs
+
+
+# ---------------------------
+# ITEMS
+# ---------------------------
+
+def load_items(min_ilvl=700):
 
     items = load_csv("Item")
 
     base_params = load_base_params()
-
-    stat_columns = detect_stat_columns(items, base_params)
+    slots = load_slots()
+    blm_jobs = load_job_categories()
 
     parsed = []
 
@@ -120,28 +123,54 @@ def load_items():
         if not name:
             continue
 
+        job_cat = get(item, 63)
+
+        if job_cat not in blm_jobs:
+            continue
+
         ilvl = get(item, 24)
 
         try:
             ilvl = int(ilvl)
         except:
-            ilvl = 0
+            continue
+
+        if ilvl < min_ilvl:
+            continue
+
+        slot_id = get(item, 10)
+        slot = slots.get(slot_id, "Unknown")
 
         stats = {}
 
-        for col, stat in stat_columns.items():
+        stat_pairs = [
+            (68, 69),
+            (70, 71),
+            (72, 73),
+            (74, 75),
+            (76, 77),
+        ]
 
-            value = get(item, col)
+        for param_col, value_col in stat_pairs:
+
+            param = get(item, param_col)
+            value = get(item, value_col)
+
+            if not param or not value:
+                continue
+
+            stat_name = base_params.get(param)
+
+            if not stat_name:
+                continue
 
             try:
                 value = int(value)
             except:
                 continue
 
-            if value <= 0:
-                continue
-
-            stats[stat] = value
+            if value > 0:
+                stats[stat_name] = value
 
         if not stats:
             continue
@@ -149,32 +178,23 @@ def load_items():
         parsed.append({
             "Name": name,
             "LevelItem": ilvl,
+            "slot": slot,
             "stats": stats
         })
 
-    log(f"Items parsed ({len(parsed)})")
+    log(f"BLM items after ilvl filter: {len(parsed)}")
 
     return parsed
 
 
-# -------------------------------
+# ---------------------------
 # MATERIA
-# -------------------------------
+# ---------------------------
 
 def load_materia():
 
     materia_rows = load_csv("Materia")
-    param_rows = load_csv("MateriaParam")
-
-    param_map = {}
-
-    for p in param_rows:
-
-        key = get_id(p)
-        stat = get(p, 0)
-
-        if key and stat:
-            param_map[str(key)] = stat
+    base_params = load_base_params()
 
     materia = []
 
@@ -183,14 +203,17 @@ def load_materia():
         stat_key = get(m, 2)
         value = get(m, 3)
 
-        stat = param_map.get(str(stat_key))
+        stat = base_params.get(stat_key)
+
+        if not stat:
+            continue
 
         try:
             value = int(value)
         except:
-            value = 0
+            continue
 
-        if not stat:
+        if value <= 0:
             continue
 
         materia.append({
