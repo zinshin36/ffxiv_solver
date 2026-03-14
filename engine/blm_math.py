@@ -10,21 +10,15 @@ def gcd_from_sps(spell_speed):
     if spell_speed <= 0:
         return BASE_GCD
 
-    speed = math.floor(
+    gcd = math.floor(
         BASE_GCD * (1000 - math.floor(130 * (spell_speed - BASE_STAT) / LEVEL_MOD)) / 1000
     )
 
-    return round(speed, 3)
+    return round(gcd,3)
 
 
-def gcd_tier(spell_speed):
-
-    return gcd_from_sps(spell_speed)
-
-
-def tier_bonus(spell_speed):
+def gcd_bonus(spell_speed):
 
     gcd = gcd_from_sps(spell_speed)
 
-    # reward faster GCD tiers
-    return (2.5 - gcd) * 100
+    return (2.5 - gcd) * 120
