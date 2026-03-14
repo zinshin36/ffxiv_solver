@@ -5,10 +5,6 @@ from engine.logger import log, csv_log
 GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
 
-# --------------------------------------------------
-# GENERIC CSV LOADER
-# --------------------------------------------------
-
 def load_csv(name):
 
     path = os.path.join(GAME_DATA_DIR, f"{name}.csv")
@@ -19,7 +15,6 @@ def load_csv(name):
     with open(path, encoding="utf-8-sig") as f:
 
         reader = csv.DictReader(f)
-
         rows = list(reader)
 
         headers = reader.fieldnames
@@ -34,18 +29,18 @@ def load_csv(name):
     return rows
 
 
+def get(row, column):
+
+    return row.get(column) or row.get(str(column))
+
+
 def get_id(row):
 
-    return (
-        row.get("#")
-        or row.get("RowId")
-        or row.get("Key")
-        or row.get("ID")
-    )
+    return get(row, "key")
 
 
 # --------------------------------------------------
-# BASE PARAM MAP
+# BASE PARAM
 # --------------------------------------------------
 
 def load_base_params():
@@ -58,7 +53,7 @@ def load_base_params():
 
         key = get_id(r)
 
-        name = r.get("Name") or r.get("Text")
+        name = get(r, 0)
 
         if key and name:
             mapping[str(key)] = name
@@ -69,43 +64,7 @@ def load_base_params():
 
 
 # --------------------------------------------------
-# ITEM STAT EXTRACTION
-# --------------------------------------------------
-
-def extract_stats(item, base_params):
-
-    stats = {}
-
-    for i in range(10):
-
-        param = (
-            item.get(f"BaseParam[{i}]")
-            or item.get(f"BaseParam{i}")
-        )
-
-        value = (
-            item.get(f"BaseParamValue[{i}]")
-            or item.get(f"BaseParamValue{i}")
-        )
-
-        if not param or not value:
-            continue
-
-        stat_name = base_params.get(str(param))
-
-        if not stat_name:
-            continue
-
-        try:
-            stats[stat_name] = int(value)
-        except:
-            continue
-
-    return stats
-
-
-# --------------------------------------------------
-# LOAD ITEMS
+# ITEM PARSER
 # --------------------------------------------------
 
 def load_items():
@@ -118,30 +77,54 @@ def load_items():
 
     for item in items:
 
-        name = item.get("Name")
+        name = get(item, 9)
 
         if not name:
             continue
 
-        stats = extract_stats(item, base_params)
-
-        if not stats:
-            continue
-
-        ilvl = item.get("LevelItem")
+        ilvl = get(item, 24)
 
         try:
             ilvl = int(ilvl)
         except:
             ilvl = 0
 
+        stats = {}
+
+        # BaseParam indexes (Godbert export)
+        stat_pairs = [
+            (68, 69),
+            (70, 71),
+            (72, 73),
+            (74, 75),
+            (76, 77),
+        ]
+
+        for param_col, value_col in stat_pairs:
+
+            param = get(item, param_col)
+            value = get(item, value_col)
+
+            if not param or not value:
+                continue
+
+            stat_name = base_params.get(str(param))
+
+            if not stat_name:
+                continue
+
+            try:
+                stats[stat_name] = int(value)
+            except:
+                continue
+
+        if not stats:
+            continue
+
         parsed.append({
             "Name": name,
             "LevelItem": ilvl,
-            "Slot": item.get("EquipSlotCategory"),
-            "JobCategory": item.get("ClassJobCategory"),
-            "MateriaSlots": int(item.get("MateriaSlotCount", 0)),
-            "stats": stats
+            "stats": stats,
         })
 
     log(f"Items parsed ({len(parsed)})")
@@ -150,7 +133,7 @@ def load_items():
 
 
 # --------------------------------------------------
-# LOAD MATERIA
+# MATERIA
 # --------------------------------------------------
 
 def load_materia():
@@ -163,8 +146,7 @@ def load_materia():
     for p in param_rows:
 
         key = get_id(p)
-
-        stat = p.get("BaseParam")
+        stat = get(p, 0)
 
         if key and stat:
             param_map[str(key)] = stat
@@ -173,12 +155,13 @@ def load_materia():
 
     for m in materia_rows:
 
-        stat_key = m.get("BaseParam")
+        stat_key = get(m, 2)
+        value = get(m, 3)
 
         stat = param_map.get(str(stat_key))
 
         try:
-            value = int(m.get("Value", 0))
+            value = int(value)
         except:
             value = 0
 
@@ -186,7 +169,6 @@ def load_materia():
             continue
 
         materia.append({
-            "name": m.get("Name"),
             "stat": stat,
             "value": value
         })
