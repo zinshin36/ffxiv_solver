@@ -1,44 +1,57 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+
 from engine.csv_loader import load_items, load_materia
 from engine.optimizer import top_sets
-from engine.logger import logging
+from engine.logger import log
 
-class App:
+
+class SolverGUI:
+
     def __init__(self, root):
+
         self.root = root
-        root.title("FFXIV BiS Solver")
-        tk.Button(root, text="Build Top Sets", command=self.build_top_sets).pack(pady=10)
+        root.title("FFXIV BLM Gear Solver")
 
-    def build_top_sets(self):
-        try:
-            items = load_items()
-            materia_list = load_materia()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load game data: {e}")
-            return
+        frame = tk.Frame(root, padx=10, pady=10)
+        frame.pack()
 
-        blacklist_input = simpledialog.askstring(
-            "Blacklist",
-            "Enter gear names to blacklist (comma-separated):"
+        tk.Label(frame, text="Target GCD").grid(row=0, column=0)
+
+        self.gcd_entry = tk.Entry(frame, width=10)
+        self.gcd_entry.insert(0, "2.38")
+        self.gcd_entry.grid(row=0, column=1)
+
+        run_button = tk.Button(
+            frame,
+            text="Run Solver",
+            command=self.run_solver
         )
 
-        blacklist = []
-        if blacklist_input:
-            blacklist = [x.strip() for x in blacklist_input.split(",")]
+        run_button.grid(row=1, column=0, columnspan=2, pady=10)
 
-        top10 = top_sets(items, materia_list, blacklist=blacklist)
+    def run_solver(self):
 
-        if not top10:
-            messagebox.showinfo("Result", "No gear sets found.")
-            return
+        try:
+            target_gcd = float(self.gcd_entry.get())
+        except:
+            target_gcd = None
 
-        output = ""
-        best_dps = top10[0]["dps"]
-        for i, s in enumerate(top10):
-            output += f"Set {i+1} | DPS {s['dps']:.2f} | Diff {best_dps - s['dps']:.2f}\n"
-            for item in s["gear"].values():
-                output += f"  {item['name']} (i{item['ilvl']}) Materia:{item.get('MateriaApplied',0)}\n"
-            output += "\n"
+        log("Running solver...")
 
-        messagebox.showinfo("Top Sets", output)
+        items = load_items()
+        materia = load_materia()
+
+        top_sets(items, materia, target_gcd)
+
+
+def main():
+
+    root = tk.Tk()
+
+    SolverGUI(root)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
