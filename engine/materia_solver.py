@@ -1,33 +1,69 @@
-from config import STAT_WEIGHTS
+from itertools import combinations
+from engine.simulator import simulate_dps
 
 
-def best_materia(stats, slots, materia_db):
+def get_materia_by_stat(materia):
+
+    stats = {}
+
+    for m in materia:
+
+        stat = m["stat"]
+        val = m["value"]
+
+        if stat not in stats or val > stats[stat]:
+            stats[stat] = val
+
+    return stats
+
+
+def apply_materia_layout(item, materia_layout):
+
+    stats = item["stats"].copy()
+
+    for stat, value in materia_layout:
+
+        stats[stat] = stats.get(stat, 0) + value
+
+    return stats
+
+
+def generate_layouts(item, materia):
+
+    slots = item["MateriaSlots"]
 
     if slots == 0:
-        return stats
+        return [[]]
 
-    best = None
-    best_score = -1
+    best = get_materia_by_stat(materia)
 
-    for m in materia_db:
+    materia_options = [(k, v) for k, v in best.items()]
 
-        score = 0
+    layouts = []
 
-        for s, v in m["stats"].items():
+    for combo in combinations(materia_options, min(slots, len(materia_options))):
+        layouts.append(combo)
 
-            weight = STAT_WEIGHTS.get(s, 0)
+    return layouts
 
-            score += v * weight
+
+def optimize_item_materia(item, materia):
+
+    layouts = generate_layouts(item, materia)
+
+    best_stats = item["stats"]
+    best_score = 0
+
+    for layout in layouts:
+
+        stats = apply_materia_layout(item, layout)
+
+        fake_gear = {"piece": {"stats": stats}}
+
+        score = simulate_dps(fake_gear)
 
         if score > best_score:
-
             best_score = score
-            best = m
+            best_stats = stats
 
-    out = stats.copy()
-
-    for s, v in best["stats"].items():
-
-        out[s] = out.get(s, 0) + v * slots
-
-    return out
+    return best_stats
