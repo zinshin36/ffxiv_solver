@@ -1,16 +1,25 @@
 import csv
+import os
+
 from engine.logger import log, csv_log
 
-DATA = "data/"
+DATA_DIR = "game_data"
 
 
 def read_csv(name):
 
-    path = DATA + name
+    path = os.path.join(DATA_DIR, name)
 
-    with open(path, encoding="utf8") as f:
+    if not os.path.exists(path):
+        log(f"Missing CSV: {path}")
+        return []
+
+    with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         rows = list(reader)
+
+    if not rows:
+        return []
 
     csv_log(f"{name} columns:")
     csv_log(", ".join(rows[0]))
@@ -18,9 +27,21 @@ def read_csv(name):
     return rows
 
 
+def safe_int(value):
+
+    try:
+        return int(value)
+    except:
+        return 0
+
+
 def load_items():
 
     rows = read_csv("Item.csv")
+
+    if not rows:
+        log("Item.csv failed to load")
+        return []
 
     items = []
 
@@ -28,33 +49,34 @@ def load_items():
 
         try:
 
-            ilvl = int(r[10])
+            name = r[1]
+            slot = r[4]
+            ilvl = safe_int(r[10])
 
-            if ilvl < 600:
+            # ignore junk rows
+            if not name or ilvl <= 0:
                 continue
 
-            slot = r[4]
-
             stats = {
-                "CriticalHit": int(r[50] or 0),
-                "Determination": int(r[51] or 0),
-                "DirectHitRate": int(r[52] or 0),
-                "SpellSpeed": int(r[53] or 0),
-                "Intelligence": int(r[40] or 0),
+                "Intelligence": safe_int(r[40]),
+                "CriticalHit": safe_int(r[50]),
+                "Determination": safe_int(r[51]),
+                "DirectHitRate": safe_int(r[52]),
+                "SpellSpeed": safe_int(r[53]),
             }
 
             item = {
-                "Name": r[1],
+                "Name": name,
                 "slot": slot,
                 "ilvl": ilvl,
-                "MateriaSlots": int(r[30] or 0),
-                "stat_cap": int(r[60] or 9999),
+                "MateriaSlots": safe_int(r[30]),
+                "stat_cap": safe_int(r[60]) or 9999,
                 "stats": stats
             }
 
             items.append(item)
 
-        except:
+        except Exception as e:
             continue
 
     log(f"Items parsed ({len(items)})")
@@ -66,18 +88,25 @@ def load_materia():
 
     rows = read_csv("Materia.csv")
 
+    if not rows:
+        log("Materia.csv failed to load")
+        return []
+
     materia = []
 
     for r in rows[1:]:
 
         try:
 
+            name = r[1]
             stat = r[4]
+            value = safe_int(r[5])
 
-            value = int(r[5])
+            if not name or value == 0:
+                continue
 
             materia.append({
-                "name": r[1],
+                "name": name,
                 "stat": stat,
                 "value": value
             })
