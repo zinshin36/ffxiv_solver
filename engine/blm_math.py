@@ -5,30 +5,34 @@ LEVEL_MOD = 1900
 BASE_STAT = 400
 
 
-def gcd_from_sps(spell_speed):
+def gcd_from_sps(sps):
 
-    if spell_speed <= 0:
+    if sps <= 0:
         return BASE_GCD
 
     gcd = math.floor(
-        BASE_GCD * (1000 - math.floor(130 * (spell_speed - BASE_STAT) / LEVEL_MOD)) / 1000
+        BASE_GCD *
+        (1000 - math.floor(130 * (sps - BASE_STAT) / LEVEL_MOD))
+        / 1000
     )
 
     return round(gcd, 3)
 
 
-def gcd_score(spell_speed, target):
+def gcd_bonus(sps, target):
 
-    gcd = gcd_from_sps(spell_speed)
+    gcd = gcd_from_sps(sps)
 
-    bonus = (2.5 - gcd) * 120
+    score = (2.5 - gcd) * 150
 
     if target:
+
         diff = abs(gcd - target)
 
         if diff < 0.01:
-            bonus += 800
-        elif diff < 0.02:
-            bonus += 200
+            score += 800
 
-    return bonus
+        elif diff < 0.02:
+            score += 200
+
+    return score
