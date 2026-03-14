@@ -14,7 +14,7 @@ def stat_score(stats, target_gcd):
     dh = stats.get("DirectHitRate", 0)
     sps = stats.get("SpellSpeed", 0)
 
-    value = (
+    score = (
         main * 1.0 +
         crit * 0.45 +
         det * 0.35 +
@@ -22,17 +22,26 @@ def stat_score(stats, target_gcd):
         sps * 0.25
     )
 
-    value += gcd_bonus(sps, target_gcd)
+    score += gcd_bonus(sps, target_gcd)
 
-    return value
+    return score
 
 
-def solve(items, materia, target_gcd, food):
+def build_slot_map(items):
 
     slots = {}
 
     for i in items:
         slots.setdefault(i["slot"], []).append(i)
+
+    if "Ring" in slots:
+        slots["Ring1"] = slots["Ring"]
+        slots["Ring2"] = slots["Ring"]
+
+    return slots
+
+
+def prune_candidates(slots, target_gcd, limit=6):
 
     for s in slots:
 
@@ -40,14 +49,27 @@ def solve(items, materia, target_gcd, food):
             slots[s],
             key=lambda x: stat_score(x["stats"], target_gcd),
             reverse=True
-        )[:6]
+        )[:limit]
 
-    best = None
-    best_score = 0
+    return slots
+
+
+def solve(items, materia, target_gcd, food):
+
+    slots = build_slot_map(items)
+
+    slots = prune_candidates(slots, target_gcd)
 
     slot_lists = list(slots.values())
 
+    best_score = 0
+    best = None
+
+    tested = 0
+
     for combo in product(*slot_lists):
+
+        tested += 1
 
         merged = {}
         melds = []
@@ -69,6 +91,8 @@ def solve(items, materia, target_gcd, food):
             best_score = score
             best = (combo, melds, merged)
 
+    solver_log(f"Combinations tested: {tested}")
+
     combo, melds, stats = best
 
     solver_log("BEST SET")
@@ -76,7 +100,15 @@ def solve(items, materia, target_gcd, food):
     for item in combo:
         solver_log(f"{item['slot']} : {item['name']}")
 
-    solver_log("STATS")
+    solver_log("MELDS")
+
+    for name, m in melds:
+
+        meld_names = [x["name"] for x in m]
+
+        solver_log(f"{name}: {', '.join(meld_names)}")
+
+    solver_log("FINAL STATS")
 
     for k, v in stats.items():
         solver_log(f"{k}: {v}")
