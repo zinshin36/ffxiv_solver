@@ -23,6 +23,4 @@ def simulate_dps(gear_set):
 
     potency = 320
 
-    dps = wd * main * crit_mod * det_mod * dh_mod * potency * casts
-
-    return dps
+    return wd * main * crit_mod * det_mod * dh_mod * potency * casts
