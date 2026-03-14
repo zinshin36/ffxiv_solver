@@ -1,11 +1,12 @@
-from engine.csv_loader import read_csv, safe_int
+from engine.csv_loader import load_csv, i
 from engine.logger import log
 
-BLM_JOB_COLUMN = 26  # column index for Black Mage in ClassJobCategory
+BLM_COLUMN = 26
 
 
 def load_base_params():
-    rows = read_csv("BaseParam.csv")
+
+    rows = load_csv("BaseParam.csv")
     mapping = {}
 
     for r in rows[1:]:
@@ -14,59 +15,64 @@ def load_base_params():
     return mapping
 
 
-def load_classjob():
-    rows = read_csv("ClassJobCategory.csv")
-    mapping = {}
+def load_classjobs():
+
+    rows = load_csv("ClassJobCategory.csv")
+    jobs = {}
 
     for r in rows[1:]:
-        mapping[r[0]] = r
+        jobs[r[0]] = r
 
-    return mapping
+    return jobs
 
 
-def load_items(min_ilvl=0):
+def load_items(min_ilvl):
+
     base_params = load_base_params()
-    job_map = load_classjob()
+    jobs = load_classjobs()
 
-    rows = read_csv("Item.csv")
+    rows = load_csv("Item.csv")
 
     items = []
 
     for r in rows[1:]:
 
         name = r[1]
-        ilvl = safe_int(r[10])
-        job_cat = r[2]
+        ilvl = i(r[10])
+        jobcat = r[2]
 
-        if not name or ilvl < min_ilvl:
+        if not name:
             continue
 
-        job_row = job_map.get(job_cat)
-
-        if not job_row:
+        if ilvl < min_ilvl:
             continue
 
-        if job_row[BLM_JOB_COLUMN] != "True":
+        jobrow = jobs.get(jobcat)
+
+        if not jobrow:
+            continue
+
+        if jobrow[BLM_COLUMN] != "True":
             continue
 
         stats = {
-            "Intelligence": safe_int(r[40]),
-            "CriticalHit": safe_int(r[50]),
-            "Determination": safe_int(r[51]),
-            "DirectHitRate": safe_int(r[52]),
-            "SpellSpeed": safe_int(r[53]),
+            "Intelligence": i(r[40]),
+            "CriticalHit": i(r[50]),
+            "Determination": i(r[51]),
+            "DirectHitRate": i(r[52]),
+            "SpellSpeed": i(r[53])
         }
 
         item = {
-            "Name": name,
+            "name": name,
             "slot": r[4],
             "ilvl": ilvl,
-            "MateriaSlots": safe_int(r[30]),
+            "materia_slots": i(r[30]),
             "stats": stats
         }
 
         items.append(item)
 
-    log(f"BLM items loaded: {len(items)}")
+    log(f"Items parsed ({len(items)})")
 
     return items
