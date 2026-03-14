@@ -1,6 +1,6 @@
 import os
 import csv
-from engine.logger import log
+from engine.logger import log, csv_log
 
 GAME_DATA_DIR = os.path.join(os.getcwd(), "game_data")
 
@@ -17,10 +17,20 @@ def load_csv(name):
         raise FileNotFoundError(f"{name}.csv not found in {GAME_DATA_DIR}")
 
     with open(path, encoding="utf-8-sig") as f:
+
         reader = csv.DictReader(f)
+
         rows = list(reader)
 
+        headers = reader.fieldnames
+
     log(f"{name}.csv loaded ({len(rows)} rows)")
+
+    if headers:
+        csv_log(f"{name}.csv columns:")
+        csv_log(", ".join(headers))
+        csv_log("")
+
     return rows
 
 
@@ -56,66 +66,6 @@ def load_base_params():
     log(f"BaseParam mapping built ({len(mapping)} stats)")
 
     return mapping
-
-
-# --------------------------------------------------
-# SLOT MAP
-# --------------------------------------------------
-
-def load_slots():
-
-    rows = load_csv("EquipSlotCategory")
-
-    slots = {}
-
-    for r in rows:
-
-        key = get_id(r)
-
-        if key:
-            slots[str(key)] = r
-
-    return slots
-
-
-# --------------------------------------------------
-# JOB MAP
-# --------------------------------------------------
-
-def load_jobs():
-
-    rows = load_csv("ClassJobCategory")
-
-    jobs = {}
-
-    for r in rows:
-
-        key = get_id(r)
-
-        if key:
-            jobs[str(key)] = r
-
-    return jobs
-
-
-# --------------------------------------------------
-# ITEM LEVEL MAP
-# --------------------------------------------------
-
-def load_item_levels():
-
-    rows = load_csv("ItemLevel")
-
-    levels = {}
-
-    for r in rows:
-
-        key = get_id(r)
-
-        if key:
-            levels[str(key)] = r
-
-    return levels
 
 
 # --------------------------------------------------
@@ -163,9 +113,6 @@ def load_items():
     items = load_csv("Item")
 
     base_params = load_base_params()
-    load_slots()
-    load_jobs()
-    load_item_levels()
 
     parsed = []
 
