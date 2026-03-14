@@ -9,30 +9,33 @@ PREFERRED_STATS = [
 ]
 
 
-def apply_materia(item, materia):
+def meld_item(item, materia):
 
-    slots = item.get("MateriaSlots", 2)
+    slots = item["MateriaSlots"]
+
+    if slots <= 0:
+        return item["stats"], []
 
     stats = item["stats"].copy()
 
-    sorted_materia = sorted(
+    melds = []
+
+    materia_sorted = sorted(
         materia,
-        key=lambda x: x["value"],
+        key=lambda m: m["value"],
         reverse=True
     )
 
-    used = 0
+    for m in materia_sorted:
 
-    for m in sorted_materia:
-
-        if used >= slots:
+        if len(melds) >= slots:
             break
 
         if m["stat"] not in PREFERRED_STATS:
             continue
 
-        stats[m["stat"]] = stats.get(m["stat"], 0) + m["value"]
+        stats[m["stat"]] = stats.get(m["stat"],0) + m["value"]
 
-        used += 1
+        melds.append(m)
 
-    return stats
+    return stats, melds
