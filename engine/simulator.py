@@ -1,12 +1,11 @@
-# engine/simulator.py
 def simulate_dps(gear_set):
-    """
-    Simple DPS simulation using stats from gear_set.
-    Each item in gear_set is a dict with 'stats' dictionary.
-    """
+
     total = {}
-    for item in gear_set.values():
-        for stat, val in item.get("stats", {}).items():
+
+    for piece in gear_set.values():
+
+        for stat, val in piece["stats"].items():
+
             total[stat] = total.get(stat, 0) + int(val)
 
     main = total.get("Intelligence", 3000)
@@ -19,7 +18,11 @@ def simulate_dps(gear_set):
     crit_mod = 1 + ((crit - 400) / 1900)
     det_mod = 1 + ((det - 400) / 1900)
     dh_mod = 1 + ((dh - 400) / 3300)
-    ss_casts = 60 / (2.5 - ((ss - 400) / 1300))
+
+    casts = 60 / (2.5 - ((ss - 400) / 1300))
+
     potency = 320
 
-    return wd * main * crit_mod * det_mod * dh_mod * potency * ss_casts
+    dps = wd * main * crit_mod * det_mod * dh_mod * potency * casts
+
+    return dps
