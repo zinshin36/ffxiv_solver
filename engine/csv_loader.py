@@ -16,6 +16,7 @@ def load_csv(name):
 
         reader = csv.DictReader(f)
         rows = list(reader)
+
         headers = reader.fieldnames
 
     log(f"{name}.csv loaded ({len(rows)} rows)")
@@ -60,6 +61,27 @@ def load_base_params():
 
 
 # ---------------------------
+# JOB CATEGORY (BLM filter)
+# ---------------------------
+
+def load_job_categories():
+
+    rows = load_csv("ClassJobCategory")
+
+    blm_jobs = {}
+
+    for r in rows:
+
+        key = get_id(r)
+
+        # Column 33 = BlackMage flag
+        if get(r, 33) == "1":
+            blm_jobs[key] = True
+
+    return blm_jobs
+
+
+# ---------------------------
 # SLOT CATEGORY
 # ---------------------------
 
@@ -82,27 +104,6 @@ def load_slots():
 
 
 # ---------------------------
-# JOB CATEGORY
-# ---------------------------
-
-def load_job_categories():
-
-    rows = load_csv("ClassJobCategory")
-
-    jobs = {}
-
-    for r in rows:
-
-        key = get_id(r)
-
-        # column 33 = Black Mage flag
-        if get(r, 33) == "1":
-            jobs[key] = True
-
-    return jobs
-
-
-# ---------------------------
 # ITEMS
 # ---------------------------
 
@@ -111,8 +112,8 @@ def load_items(min_ilvl=700):
     items = load_csv("Item")
 
     base_params = load_base_params()
-    slots = load_slots()
     blm_jobs = load_job_categories()
+    slots = load_slots()
 
     parsed = []
 
@@ -139,22 +140,30 @@ def load_items(min_ilvl=700):
             continue
 
         slot_id = get(item, 10)
+
         slot = slots.get(slot_id, "Unknown")
+
+        materia_slots = get(item, 55)
+
+        try:
+            materia_slots = int(materia_slots)
+        except:
+            materia_slots = 0
 
         stats = {}
 
         stat_pairs = [
-            (68, 69),
-            (70, 71),
-            (72, 73),
-            (74, 75),
-            (76, 77),
+            (68,69),
+            (70,71),
+            (72,73),
+            (74,75),
+            (76,77)
         ]
 
-        for param_col, value_col in stat_pairs:
+        for p,v in stat_pairs:
 
-            param = get(item, param_col)
-            value = get(item, value_col)
+            param = get(item,p)
+            value = get(item,v)
 
             if not param or not value:
                 continue
@@ -179,6 +188,7 @@ def load_items(min_ilvl=700):
             "Name": name,
             "LevelItem": ilvl,
             "slot": slot,
+            "MateriaSlots": materia_slots,
             "stats": stats
         })
 
@@ -193,15 +203,16 @@ def load_items(min_ilvl=700):
 
 def load_materia():
 
-    materia_rows = load_csv("Materia")
+    rows = load_csv("Materia")
+
     base_params = load_base_params()
 
     materia = []
 
-    for m in materia_rows:
+    for r in rows:
 
-        stat_key = get(m, 2)
-        value = get(m, 3)
+        stat_key = get(r,2)
+        value = get(r,3)
 
         stat = base_params.get(stat_key)
 
@@ -217,6 +228,7 @@ def load_materia():
             continue
 
         materia.append({
+            "name": get(r,0),
             "stat": stat,
             "value": value
         })
