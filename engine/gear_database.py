@@ -5,18 +5,18 @@ BLM_COLUMN = 26
 
 
 def load_base_params():
-
     rows = load_csv("BaseParam.csv")
     mapping = {}
 
     for r in rows[1:]:
-        mapping[r[0]] = r[1]
+        key = r[0]
+        name = r[1]
+        mapping[key] = name
 
     return mapping
 
 
 def load_classjobs():
-
     rows = load_csv("ClassJobCategory.csv")
     jobs = {}
 
@@ -26,10 +26,30 @@ def load_classjobs():
     return jobs
 
 
+def load_ilvl_caps():
+
+    rows = load_csv("ItemLevel.csv")
+
+    caps = {}
+
+    for r in rows[1:]:
+        ilvl = i(r[0])
+
+        caps[ilvl] = {
+            "CriticalHit": i(r[20]),
+            "Determination": i(r[21]),
+            "DirectHitRate": i(r[22]),
+            "SpellSpeed": i(r[23])
+        }
+
+    return caps
+
+
 def load_items(min_ilvl):
 
     base_params = load_base_params()
     jobs = load_classjobs()
+    caps = load_ilvl_caps()
 
     rows = load_csv("Item.csv")
 
@@ -68,6 +88,7 @@ def load_items(min_ilvl):
             "slot": r[4],
             "ilvl": ilvl,
             "materia_slots": i(r[30]),
+            "stat_cap": caps.get(ilvl, {}),
             "stats": stats
         }
 
