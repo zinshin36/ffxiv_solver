@@ -21,9 +21,10 @@ def gcd_score(spell_speed, target):
 
     gcd = gcd_from_sps(spell_speed)
 
-    bonus = (2.5 - gcd) * 100
+    bonus = (2.5 - gcd) * 120
 
     if target:
+
         diff = abs(gcd - target)
 
         if diff < 0.01:
