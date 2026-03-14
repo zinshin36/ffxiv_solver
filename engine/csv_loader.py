@@ -1,16 +1,13 @@
 import csv
 import os
-from engine.logger import log, csv_log
+from engine.logger import csv_log
 
 DATA_DIR = "game_data"
 
 
-def read_csv(name):
-    path = os.path.join(DATA_DIR, name)
+def load_csv(name):
 
-    if not os.path.exists(path):
-        log(f"Missing CSV: {path}")
-        return []
+    path = os.path.join(DATA_DIR, name)
 
     with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
@@ -18,13 +15,13 @@ def read_csv(name):
 
     if rows:
         csv_log(f"{name} columns:")
-        csv_log(", ".join(rows[0]))
+        csv_log(",".join(rows[0]))
 
     return rows
 
 
-def safe_int(v):
+def i(x):
     try:
-        return int(v)
+        return int(x)
     except:
         return 0
