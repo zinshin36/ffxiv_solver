@@ -1,37 +1,25 @@
 import os
 from datetime import datetime
 
-LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = "logs/app.log"
+CSV_LOG = "logs/csv_debug.log"
 
-main_log_file = os.path.join(
-    LOG_DIR,
-    f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-)
-
-csv_log_file = os.path.join(
-    LOG_DIR,
-    f"csv_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-)
+os.makedirs("logs", exist_ok=True)
 
 
-def log(message):
+def log(msg):
 
-    ts = datetime.now().strftime("%H:%M:%S")
-
-    line = f"[{ts}] {message}"
+    line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
 
     print(line)
 
-    with open(main_log_file, "a", encoding="utf-8") as f:
+    with open(LOG_FILE, "a", encoding="utf8") as f:
         f.write(line + "\n")
 
 
-def csv_log(message):
+def csv_log(msg):
 
-    ts = datetime.now().strftime("%H:%M:%S")
+    line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
 
-    line = f"[{ts}] {message}"
-
-    with open(csv_log_file, "a", encoding="utf-8") as f:
+    with open(CSV_LOG, "a", encoding="utf8") as f:
         f.write(line + "\n")
