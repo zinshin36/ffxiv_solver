@@ -1,5 +1,8 @@
-from engine.logger import log
 from itertools import product
+
+from engine.logger import log
+from engine.blm_math import tier_bonus
+from engine.materia_solver import apply_materia
 
 
 def score(stats):
@@ -10,7 +13,17 @@ def score(stats):
     dh = stats.get("DirectHitRate", 0)
     main = stats.get("Intelligence", 0)
 
-    return main*1.0 + crit*0.45 + det*0.35 + dh*0.30 + sps*0.25
+    base = (
+        main * 1.0 +
+        crit * 0.45 +
+        det * 0.35 +
+        dh * 0.30 +
+        sps * 0.25
+    )
+
+    base += tier_bonus(sps)
+
+    return base
 
 
 def merge_stats(items):
@@ -19,14 +32,14 @@ def merge_stats(items):
 
     for item in items:
 
-        for k,v in item["stats"].items():
+        for k, v in item.items():
 
-            total[k] = total.get(k,0) + v
+            total[k] = total.get(k, 0) + v
 
     return total
 
 
-def top_sets(items):
+def top_sets(items, materia):
 
     slots = {}
 
@@ -34,12 +47,14 @@ def top_sets(items):
 
         slots.setdefault(item["slot"], []).append(item)
 
+    # keep best items per slot
     for s in slots:
+
         slots[s] = sorted(
             slots[s],
             key=lambda x: score(x["stats"]),
             reverse=True
-        )[:5]
+        )[:6]
 
     slot_lists = list(slots.values())
 
@@ -48,15 +63,23 @@ def top_sets(items):
 
     for combo in product(*slot_lists):
 
-        stats = merge_stats(combo)
+        merged = {}
 
-        s = score(stats)
+        for item in combo:
+
+            stats = apply_materia(item, materia)
+
+            for k, v in stats.items():
+                merged[k] = merged.get(k, 0) + v
+
+        s = score(merged)
 
         if s > best_score:
+
             best_score = s
             best_set = combo
 
-    log("====== BEST GEAR SET ======")
+    log("====== BEST BLM SET ======")
 
     for item in best_set:
         log(f"{item['slot']} : {item['Name']}")
