@@ -1,6 +1,3 @@
-from engine.logger import log
-
-
 PREFERRED_STATS = [
     "CriticalHit",
     "Determination",
@@ -9,12 +6,15 @@ PREFERRED_STATS = [
 ]
 
 
+MAX_OVERMELD = 5
+
+
 def meld_item(item, materia):
 
-    slots = item["MateriaSlots"]
+    guaranteed = item.get("MateriaSlots", 0)
 
-    if slots <= 0:
-        return item["stats"], []
+    # crafted gear can go to 5
+    total_slots = max(guaranteed, MAX_OVERMELD)
 
     stats = item["stats"].copy()
 
@@ -22,19 +22,19 @@ def meld_item(item, materia):
 
     materia_sorted = sorted(
         materia,
-        key=lambda m: m["value"],
+        key=lambda x: x["value"],
         reverse=True
     )
 
     for m in materia_sorted:
 
-        if len(melds) >= slots:
+        if len(melds) >= total_slots:
             break
 
         if m["stat"] not in PREFERRED_STATS:
             continue
 
-        stats[m["stat"]] = stats.get(m["stat"],0) + m["value"]
+        stats[m["stat"]] = stats.get(m["stat"], 0) + m["value"]
 
         melds.append(m)
 
