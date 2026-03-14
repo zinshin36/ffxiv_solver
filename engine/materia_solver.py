@@ -4,21 +4,14 @@ MAX_OVERMELD = 5
 def meld_item(item, materia):
 
     slots = item.get("MateriaSlots", 0)
-
     max_slots = max(slots, MAX_OVERMELD)
 
     stats = item["stats"].copy()
-
     melds = []
 
-    materia_sorted = sorted(
-        materia,
-        key=lambda x: x["value"],
-        reverse=True
-    )
+    materia_sorted = sorted(materia, key=lambda x: x["value"], reverse=True)
 
     for m in materia_sorted:
-
         if len(melds) >= max_slots:
             break
 
