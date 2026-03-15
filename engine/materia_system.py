@@ -1,3 +1,4 @@
+from itertools import combinations_with_replacement
 from engine.csv_loader import load_csv, to_int
 
 MAX_OVERMELD = 5
@@ -39,35 +40,53 @@ def load_materia():
     return materia
 
 
-def apply_cap(item, stats):
+def apply_melds(base_stats, melds):
 
-    cap = item["cap"]
+    stats = base_stats.copy()
 
-    for s in cap:
-
-        if s in stats:
-            stats[s] = min(stats[s], cap[s])
+    for m in melds:
+        stats[m["stat"]] = stats.get(m["stat"], 0) + m["value"]
 
     return stats
 
 
-def meld_item(item, materia):
+def generate_meld_sets(item, materia):
 
-    slots = max(item["materia_slots"], MAX_OVERMELD)
+    slot_count = max(item["materia_slots"], MAX_OVERMELD)
 
-    stats = item["stats"].copy()
-    melds = []
+    # limit materia search to strongest ones
+    materia_sorted = sorted(
+        materia,
+        key=lambda x: x["value"],
+        reverse=True
+    )[:6]
 
-    materia_sorted = sorted(materia, key=lambda x: x["value"], reverse=True)
+    meld_sets = []
 
-    for m in materia_sorted:
+    for meld_combo in combinations_with_replacement(materia_sorted, slot_count):
 
-        if len(melds) >= slots:
-            break
+        meld_sets.append(list(meld_combo))
 
-        stats[m["stat"]] = stats.get(m["stat"], 0) + m["value"]
-        melds.append(m)
+    return meld_sets
 
-    stats = apply_cap(item, stats)
 
-    return stats, melds
+def optimize_item_melds(item, materia, stat_eval):
+
+    best_stats = None
+    best_melds = []
+    best_score = -1
+
+    meld_sets = generate_meld_sets(item, materia)
+
+    for melds in meld_sets:
+
+        stats = apply_melds(item["stats"], melds)
+
+        score = stat_eval(stats)
+
+        if score > best_score:
+            best_score = score
+            best_stats = stats
+            best_melds = melds
+
+    return best_stats, best_melds
