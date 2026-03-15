@@ -1,4 +1,4 @@
-from engine.csv_loader import load_csv, i
+from engine.csv_loader import load_csv, to_int
 
 MAX_OVERMELD = 5
 
@@ -11,9 +11,10 @@ def load_materia():
     param_map = {}
 
     for r in param_rows[1:]:
+
         materia_id = r[1]
         stat = r[2]
-        value = i(r[3])
+        value = to_int(r[3])
 
         param_map[materia_id] = (stat, value)
 
@@ -40,20 +41,19 @@ def load_materia():
 
 def apply_cap(item, stats):
 
-    cap = item.get("stat_cap", {})
+    cap = item["cap"]
 
-    for stat in cap:
+    for s in cap:
 
-        if stat in stats:
-            stats[stat] = min(stats[stat], cap[stat])
+        if s in stats:
+            stats[s] = min(stats[s], cap[s])
 
     return stats
 
 
 def meld_item(item, materia):
 
-    slots = item["materia_slots"]
-    max_slots = max(slots, MAX_OVERMELD)
+    slots = max(item["materia_slots"], MAX_OVERMELD)
 
     stats = item["stats"].copy()
     melds = []
@@ -62,13 +62,10 @@ def meld_item(item, materia):
 
     for m in materia_sorted:
 
-        if len(melds) >= max_slots:
+        if len(melds) >= slots:
             break
 
-        stat = m["stat"]
-
-        stats[stat] = stats.get(stat, 0) + m["value"]
-
+        stats[m["stat"]] = stats.get(m["stat"], 0) + m["value"]
         melds.append(m)
 
     stats = apply_cap(item, stats)
