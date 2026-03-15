@@ -1,83 +1,63 @@
 from itertools import product
 
-from engine.materia_system import meld_item
-from engine.blm_math import gcd_bonus
-from engine.logger import log
+from engine.materia_system import optimize_item_melds
+from engine.dps_model import expected_dps
+from engine.food_system import apply_food
 
 
-def stat_score(stats, target_gcd):
-
-    main = stats.get("Intelligence", 0)
-    crit = stats.get("CriticalHit", 0)
-    det = stats.get("Determination", 0)
-    dh = stats.get("DirectHitRate", 0)
-    sps = stats.get("SpellSpeed", 0)
-
-    score = (
-        main * 1.0 +
-        crit * 0.45 +
-        det * 0.35 +
-        dh * 0.30 +
-        sps * 0.25
-    )
-
-    score += gcd_bonus(sps, target_gcd)
-
-    return score
-
-
-def solve(items, materia, target_gcd):
+def solve(items, materia, foods):
 
     slots = {}
 
-    for i in items:
-        slots.setdefault(i["slot"], []).append(i)
+    for item in items:
 
-    for s in slots:
-        slots[s] = sorted(
-            slots[s],
-            key=lambda x: stat_score(x["stats"], target_gcd),
-            reverse=True
-        )[:5]
+        slot = item["slot"]
+
+        if slot == "Ring":
+            slots.setdefault("Ring1", []).append(item)
+            slots.setdefault("Ring2", []).append(item)
+        else:
+            slots.setdefault(slot, []).append(item)
 
     slot_lists = list(slots.values())
 
-    best = None
-    best_score = 0
+    best_build = None
+    best_stats = None
+    best_food = None
+    best_dps = 0
 
     for combo in product(*slot_lists):
 
-        merged = {}
-        melds = []
+        merged_stats = {}
+        build = []
 
         for item in combo:
 
-            stats, m = meld_item(item, materia)
+            def stat_eval(stats):
+                return expected_dps(stats)
 
-            melds.append((item["name"], m))
+            stats, melds = optimize_item_melds(
+                item,
+                materia,
+                stat_eval
+            )
+
+            build.append((item["name"], melds))
 
             for k, v in stats.items():
-                merged[k] = merged.get(k, 0) + v
+                merged_stats[k] = merged_stats.get(k, 0) + v
 
-        score = stat_score(merged, target_gcd)
+        for food in foods:
 
-        if score > best_score:
-            best_score = score
-            best = (combo, melds, merged)
+            final_stats = apply_food(merged_stats, food)
 
-    combo, melds, stats = best
+            dps = expected_dps(final_stats)
 
-    log("BEST SET")
+            if dps > best_dps:
 
-    for item in combo:
-        log(f"{item['slot']} : {item['name']}")
+                best_dps = dps
+                best_build = build
+                best_stats = final_stats
+                best_food = food
 
-    log("MELDS")
-
-    for name, m in melds:
-        log(f"{name}: {', '.join(x['name'] for x in m)}")
-
-    log("STATS")
-
-    for k, v in stats.items():
-        log(f"{k}: {v}")
+    return (best_build, best_stats, best_food), best_dps
