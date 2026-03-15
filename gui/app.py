@@ -1,6 +1,6 @@
 import tkinter as tk
 
-from engine.gear_database import load_items
+from engine.data_parser import load_items
 from engine.materia_system import load_materia
 from engine.optimizer import solve
 from engine.logger import log
@@ -21,30 +21,17 @@ class App:
         self.gcd.insert(0, "2.38")
         self.gcd.grid(row=0, column=1)
 
-        tk.Label(frame, text="Minimum iLvl").grid(row=1, column=0)
+        tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
 
         self.ilvl = tk.Entry(frame)
         self.ilvl.insert(0, "650")
         self.ilvl.grid(row=1, column=1)
 
-        tk.Label(frame, text="Food").grid(row=2, column=0)
-
-        self.food = tk.StringVar()
-        self.food.set("None")
-
-        tk.OptionMenu(
-            frame,
-            self.food,
-            "None",
-            "Crit Food",
-            "SpS Food"
-        ).grid(row=2, column=1)
-
         tk.Button(
             frame,
             text="Run Solver",
             command=self.run
-        ).grid(row=3, column=0, columnspan=2)
+        ).grid(row=2, column=0, columnspan=2)
 
         log("Application started")
 
@@ -56,7 +43,7 @@ class App:
         items = load_items(ilvl)
         materia = load_materia()
 
-        solve(items, materia, gcd, self.food.get())
+        solve(items, materia, gcd)
 
 
 def main():
