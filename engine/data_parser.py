@@ -11,22 +11,25 @@ STAT_MAP = {
 }
 
 
-def find_column(header, name):
+def find_column(header, text):
+
+    text = text.lower()
 
     for i, col in enumerate(header):
-        if col == name:
+
+        if text in col.lower():
             return i
 
-    raise Exception(f"Column not found: {name}")
+    raise Exception(f"Column containing '{text}' not found")
 
 
-def find_baseparam_columns(header):
+def find_baseparam_pairs(header):
 
     pairs = []
 
     for i, col in enumerate(header):
 
-        if "BaseParam[" in col and "Value" not in col:
+        if col.startswith("BaseParam["):
 
             value_col = i + 1
 
@@ -45,7 +48,6 @@ def parse_stats(row, stat_pairs):
             continue
 
         stat_name = row[stat_col]
-        value = row[value_col]
 
         if not stat_name:
             continue
@@ -55,7 +57,7 @@ def parse_stats(row, stat_pairs):
         if not mapped:
             continue
 
-        stats[mapped] = to_int(value)
+        stats[mapped] = to_int(row[value_col])
 
     return stats
 
@@ -65,25 +67,19 @@ def load_items(min_ilvl):
     rows = load_csv("Item.csv")
 
     if len(rows) < 4:
-        raise Exception("Item.csv appears malformed")
-
-    # Godbert CSV structure
-    # row0 = column numbers
-    # row1 = column names
-    # row2 = types
-    # row3+ = data
+        raise Exception("Item.csv malformed")
 
     header = rows[1]
 
     name_col = find_column(header, "Name")
-    ilvl_col = find_column(header, "ItemLevel")
+    ilvl_col = find_column(header, "Level{Item}")
     job_col = find_column(header, "ClassJobCategory")
     slot_col = find_column(header, "EquipSlotCategory")
     materia_col = find_column(header, "MateriaSlotCount")
 
-    stat_pairs = find_baseparam_columns(header)
+    stat_pairs = find_baseparam_pairs(header)
 
-    log(f"Detected {len(stat_pairs)} stat columns")
+    log(f"Stat pairs detected: {len(stat_pairs)}")
 
     items = []
 
