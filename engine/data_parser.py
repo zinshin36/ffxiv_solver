@@ -2,32 +2,40 @@ from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
 
-def find_blm_column():
-
-    rows = load_csv("ClassJobCategory.csv")
-
-    header = rows[0]
-
-    for i, col in enumerate(header):
-
-        if "BlackMage" in col or "BLM" in col:
-            return i
-
-    log("BLM column not found, defaulting to 26")
-
-    return 26
-
-
 def load_class_jobs():
 
     rows = load_csv("ClassJobCategory.csv")
 
+    # Row structure in Godbert dumps:
+    # 0 = numeric column index row
+    # 1 = real header row
+    # 2 = type row
+    # 3+ = data
+
+    header = rows[1]
+
+    blm_column = None
+
+    for i, col in enumerate(header):
+
+        if col == "BLM":
+            blm_column = i
+            break
+
+    if blm_column is None:
+        raise Exception("BLM column not found in ClassJobCategory.csv")
+
+    log(f"BLM column detected at index {blm_column}")
+
     mapping = {}
 
-    for r in rows[1:]:
-        mapping[r[0]] = r
+    for r in rows[3:]:
 
-    return rows, mapping
+        key = r[0]
+
+        mapping[key] = r
+
+    return mapping, blm_column
 
 
 def load_item_caps():
@@ -52,10 +60,8 @@ def load_item_caps():
 
 def load_items(min_ilvl):
 
-    rows_jobs, job_map = load_class_jobs()
+    job_map, blm_column = load_class_jobs()
     caps = load_item_caps()
-
-    blm_column = find_blm_column()
 
     rows = load_csv("Item.csv")
 
