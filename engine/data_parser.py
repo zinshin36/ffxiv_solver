@@ -11,15 +11,41 @@ STAT_MAP = {
 }
 
 
-def parse_stats(row):
+def find_column(header, name):
+
+    for i, col in enumerate(header):
+        if col == name:
+            return i
+
+    raise Exception(f"Column not found: {name}")
+
+
+def find_baseparam_columns(header):
+
+    pairs = []
+
+    for i, col in enumerate(header):
+
+        if "BaseParam[" in col and "Value" not in col:
+
+            value_col = i + 1
+
+            pairs.append((i, value_col))
+
+    return pairs
+
+
+def parse_stats(row, stat_pairs):
 
     stats = {}
 
-    # BaseParam pairs start at column 60
-    for i in range(60, 72, 2):
+    for stat_col, value_col in stat_pairs:
 
-        stat_name = row[i]
-        value = row[i + 1]
+        if stat_col >= len(row) or value_col >= len(row):
+            continue
+
+        stat_name = row[stat_col]
+        value = row[value_col]
 
         if not stat_name:
             continue
@@ -38,16 +64,39 @@ def load_items(min_ilvl):
 
     rows = load_csv("Item.csv")
 
+    if len(rows) < 4:
+        raise Exception("Item.csv appears malformed")
+
+    # Godbert CSV structure
+    # row0 = column numbers
+    # row1 = column names
+    # row2 = types
+    # row3+ = data
+
+    header = rows[1]
+
+    name_col = find_column(header, "Name")
+    ilvl_col = find_column(header, "ItemLevel")
+    job_col = find_column(header, "ClassJobCategory")
+    slot_col = find_column(header, "EquipSlotCategory")
+    materia_col = find_column(header, "MateriaSlotCount")
+
+    stat_pairs = find_baseparam_columns(header)
+
+    log(f"Detected {len(stat_pairs)} stat columns")
+
     items = []
 
-    # skip 3 header rows
     for r in rows[3:]:
 
-        name = r[10]
-        ilvl = to_int(r[12])
-        jobs = r[44]
-        slot = r[18]
-        materia_slots = to_int(r[87])
+        if len(r) <= ilvl_col:
+            continue
+
+        name = r[name_col]
+        ilvl = to_int(r[ilvl_col])
+        jobs = r[job_col]
+        slot = r[slot_col]
+        materia_slots = to_int(r[materia_col])
 
         if not name:
             continue
@@ -55,11 +104,12 @@ def load_items(min_ilvl):
         if ilvl < min_ilvl:
             continue
 
-        # check if BLM usable
-        if "BLM" not in jobs and "THM" not in jobs:
-            continue
+        if jobs:
 
-        stats = parse_stats(r)
+            if "BLM" not in jobs and "THM" not in jobs:
+                continue
+
+        stats = parse_stats(r, stat_pairs)
 
         item = {
             "name": name,
