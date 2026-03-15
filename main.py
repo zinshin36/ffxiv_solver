@@ -1,14 +1,14 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
 
-from engine.csv_loader import load_items, load_materia
-from engine.optimizer import top_sets
+from engine.data_parser import load_items
+from engine.materia_system import load_materia
+from engine.optimizer import solve
 from engine.logger import log
 
 
 items = []
 materia = []
-blacklist = []
 
 
 def load_data():
@@ -17,69 +17,44 @@ def load_data():
 
     try:
 
-        items = load_items()
+        items = load_items(650)
         materia = load_materia()
 
-        messagebox.showinfo("Loaded", f"{len(items)} items loaded")
+        messagebox.showinfo(
+            "Loaded",
+            f"{len(items)} items loaded"
+        )
 
     except Exception as e:
 
         messagebox.showerror("Error", str(e))
 
 
-def set_blacklist():
-
-    global blacklist
-
-    text = simpledialog.askstring(
-        "Blacklist",
-        "Enter item names separated by commas"
-    )
-
-    if not text:
-        return
-
-    blacklist = [x.strip() for x in text.split(",")]
-
-    log(f"Blacklist set: {blacklist}")
-
-
 def run_solver():
 
     if not items:
-
         messagebox.showerror("Error", "Load data first")
         return
 
-    results = top_sets(items, materia, blacklist)
+    result, dps = solve(items, materia, 2.38)
 
-    if not results:
+    build, stats, food = result
 
-        messagebox.showinfo("Result", "No sets found")
-        return
+    output = f"Best DPS: {dps:.2f}\n\n"
 
-    best = results[0]["dps"]
+    for name, melds in build:
 
-    output = ""
+        meld_names = [m["name"] for m in melds]
 
-    for r in results:
+        output += f"{name} | {', '.join(meld_names)}\n"
 
-        diff = best - r["dps"]
-
-        gear = ", ".join(
-            [g["Name"] for g in r["gear"].values()]
-        )
-
-        output += f"{r['dps']:.2f} DPS (-{diff:.2f})\n{gear}\n\n"
-
-    messagebox.showinfo("Top 10 Sets", output)
+    messagebox.showinfo("Best Build", output)
 
 
 root = tk.Tk()
 root.title("FFXIV Gear Solver")
 
 tk.Button(root, text="Load Game Data", command=load_data, width=30).pack(pady=10)
-tk.Button(root, text="Set Blacklist", command=set_blacklist, width=30).pack(pady=10)
 tk.Button(root, text="Run Solver", command=run_solver, width=30).pack(pady=10)
 
 log("Application started")
