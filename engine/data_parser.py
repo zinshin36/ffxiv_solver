@@ -2,77 +2,52 @@ from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
 
-def load_class_jobs():
-
-    rows = load_csv("ClassJobCategory.csv")
-
-    # Row structure in Godbert dumps:
-    # 0 = numeric column index row
-    # 1 = real header row
-    # 2 = type row
-    # 3+ = data
-
-    header = rows[1]
-
-    blm_column = None
-
-    for i, col in enumerate(header):
-
-        if col == "BLM":
-            blm_column = i
-            break
-
-    if blm_column is None:
-        raise Exception("BLM column not found in ClassJobCategory.csv")
-
-    log(f"BLM column detected at index {blm_column}")
-
-    mapping = {}
-
-    for r in rows[3:]:
-
-        key = r[0]
-
-        mapping[key] = r
-
-    return mapping, blm_column
+STAT_MAP = {
+    "Critical Hit": "CriticalHit",
+    "Determination": "Determination",
+    "Direct Hit Rate": "DirectHitRate",
+    "Spell Speed": "SpellSpeed",
+    "Intelligence": "Intelligence"
+}
 
 
-def load_item_caps():
+def parse_stats(row):
 
-    rows = load_csv("ItemLevel.csv")
+    stats = {}
 
-    caps = {}
+    # BaseParam pairs start at column 60
+    for i in range(60, 72, 2):
 
-    for r in rows[1:]:
+        stat_name = row[i]
+        value = row[i + 1]
 
-        ilvl = to_int(r[0])
+        if not stat_name:
+            continue
 
-        caps[ilvl] = {
-            "CriticalHit": to_int(r[20]),
-            "Determination": to_int(r[21]),
-            "DirectHitRate": to_int(r[22]),
-            "SpellSpeed": to_int(r[23])
-        }
+        mapped = STAT_MAP.get(stat_name)
 
-    return caps
+        if not mapped:
+            continue
+
+        stats[mapped] = to_int(value)
+
+    return stats
 
 
 def load_items(min_ilvl):
-
-    job_map, blm_column = load_class_jobs()
-    caps = load_item_caps()
 
     rows = load_csv("Item.csv")
 
     items = []
 
-    for r in rows[1:]:
+    # skip 3 header rows
+    for r in rows[3:]:
 
-        name = r[1]
-        jobcat = r[2]
-        slot = r[4]
-        ilvl = to_int(r[10])
+        name = r[10]
+        ilvl = to_int(r[12])
+        jobs = r[44]
+        slot = r[18]
+        materia_slots = to_int(r[87])
 
         if not name:
             continue
@@ -80,31 +55,17 @@ def load_items(min_ilvl):
         if ilvl < min_ilvl:
             continue
 
-        jobrow = job_map.get(jobcat)
-
-        if not jobrow:
+        # check if BLM usable
+        if "BLM" not in jobs and "THM" not in jobs:
             continue
 
-        if blm_column >= len(jobrow):
-            continue
-
-        if jobrow[blm_column] != "True":
-            continue
-
-        stats = {
-            "Intelligence": to_int(r[40]),
-            "CriticalHit": to_int(r[50]),
-            "Determination": to_int(r[51]),
-            "DirectHitRate": to_int(r[52]),
-            "SpellSpeed": to_int(r[53])
-        }
+        stats = parse_stats(r)
 
         item = {
             "name": name,
             "slot": slot,
             "ilvl": ilvl,
-            "materia_slots": to_int(r[30]),
-            "cap": caps.get(ilvl, {}),
+            "materia_slots": materia_slots,
             "stats": stats
         }
 
