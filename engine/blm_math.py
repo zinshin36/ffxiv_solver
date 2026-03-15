@@ -19,19 +19,30 @@ def gcd_from_sps(sps):
     return round(gcd, 3)
 
 
-def gcd_bonus(sps, target):
+def find_sps_tiers(min_sps=400, max_sps=3000):
+
+    tiers = {}
+
+    for sps in range(min_sps, max_sps):
+
+        gcd = gcd_from_sps(sps)
+
+        if gcd not in tiers:
+            tiers[gcd] = sps
+
+    return tiers
+
+
+def tier_bonus(sps, target_gcd):
 
     gcd = gcd_from_sps(sps)
 
-    bonus = (2.5 - gcd) * 150
+    diff = abs(gcd - target_gcd)
 
-    if target:
+    if diff < 0.005:
+        return 1000
 
-        diff = abs(gcd - target)
+    if diff < 0.02:
+        return 200
 
-        if diff < 0.01:
-            bonus += 800
-        elif diff < 0.02:
-            bonus += 200
-
-    return bonus
+    return 0
