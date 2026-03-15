@@ -1,11 +1,12 @@
 from itertools import product
 
 from engine.materia_system import optimize_item_melds
+from engine.food_system import FOODS, apply_food
 from engine.dps_model import expected_dps
-from engine.food_system import apply_food
+from engine.blm_math import tier_bonus
 
 
-def solve(items, materia, foods):
+def solve(items, materia, target_gcd):
 
     slots = {}
 
@@ -21,43 +22,46 @@ def solve(items, materia, foods):
 
     slot_lists = list(slots.values())
 
-    best_build = None
-    best_stats = None
-    best_food = None
+    best = None
     best_dps = 0
 
     for combo in product(*slot_lists):
 
-        merged_stats = {}
+        merged = {}
         build = []
 
         for item in combo:
 
-            def stat_eval(stats):
-                return expected_dps(stats)
+            def eval_stats(stats):
+
+                score = expected_dps(stats)
+
+                sps = stats.get("SpellSpeed", 400)
+
+                score += tier_bonus(sps, target_gcd)
+
+                return score
 
             stats, melds = optimize_item_melds(
                 item,
                 materia,
-                stat_eval
+                eval_stats
             )
 
             build.append((item["name"], melds))
 
             for k, v in stats.items():
-                merged_stats[k] = merged_stats.get(k, 0) + v
+                merged[k] = merged.get(k, 0) + v
 
-        for food in foods:
+        for food in FOODS:
 
-            final_stats = apply_food(merged_stats, food)
+            final = apply_food(merged, food)
 
-            dps = expected_dps(final_stats)
+            dps = expected_dps(final)
 
             if dps > best_dps:
 
                 best_dps = dps
-                best_build = build
-                best_stats = final_stats
-                best_food = food
+                best = (build, final, food)
 
-    return (best_build, best_stats, best_food), best_dps
+    return best, best_dps
