@@ -7,7 +7,7 @@ BASE_STAT = 400
 
 def gcd_from_sps(sps):
 
-    if sps <= 0:
+    if sps <= BASE_STAT:
         return BASE_GCD
 
     gcd = math.floor(
@@ -23,16 +23,15 @@ def gcd_bonus(sps, target):
 
     gcd = gcd_from_sps(sps)
 
-    score = (2.5 - gcd) * 150
+    bonus = (2.5 - gcd) * 150
 
     if target:
 
         diff = abs(gcd - target)
 
         if diff < 0.01:
-            score += 800
-
+            bonus += 800
         elif diff < 0.02:
-            score += 200
+            bonus += 200
 
-    return score
+    return bonus
