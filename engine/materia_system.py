@@ -52,37 +52,24 @@ def apply_melds(base_stats, melds):
 
 def generate_meld_sets(item, materia):
 
-    slot_count = max(item["materia_slots"], MAX_OVERMELD)
+    slots = max(item["materia_slots"], MAX_OVERMELD)
 
-    # limit materia search to strongest ones
-    materia_sorted = sorted(
-        materia,
-        key=lambda x: x["value"],
-        reverse=True
-    )[:6]
+    materia = sorted(materia, key=lambda x: x["value"], reverse=True)[:6]
 
-    meld_sets = []
-
-    for meld_combo in combinations_with_replacement(materia_sorted, slot_count):
-
-        meld_sets.append(list(meld_combo))
-
-    return meld_sets
+    return combinations_with_replacement(materia, slots)
 
 
-def optimize_item_melds(item, materia, stat_eval):
+def optimize_item_melds(item, materia, score_func):
 
     best_stats = None
     best_melds = []
     best_score = -1
 
-    meld_sets = generate_meld_sets(item, materia)
-
-    for melds in meld_sets:
+    for melds in generate_meld_sets(item, materia):
 
         stats = apply_melds(item["stats"], melds)
 
-        score = stat_eval(stats)
+        score = score_func(stats)
 
         if score > best_score:
             best_score = score
