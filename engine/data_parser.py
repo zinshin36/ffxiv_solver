@@ -1,7 +1,21 @@
 from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
-BLM_COLUMN = 26
+
+def find_blm_column():
+
+    rows = load_csv("ClassJobCategory.csv")
+
+    header = rows[0]
+
+    for i, col in enumerate(header):
+
+        if "BlackMage" in col or "BLM" in col:
+            return i
+
+    log("BLM column not found, defaulting to 26")
+
+    return 26
 
 
 def load_class_jobs():
@@ -13,7 +27,7 @@ def load_class_jobs():
     for r in rows[1:]:
         mapping[r[0]] = r
 
-    return mapping
+    return rows, mapping
 
 
 def load_item_caps():
@@ -38,8 +52,10 @@ def load_item_caps():
 
 def load_items(min_ilvl):
 
-    job_map = load_class_jobs()
+    rows_jobs, job_map = load_class_jobs()
     caps = load_item_caps()
+
+    blm_column = find_blm_column()
 
     rows = load_csv("Item.csv")
 
@@ -63,7 +79,10 @@ def load_items(min_ilvl):
         if not jobrow:
             continue
 
-        if jobrow[BLM_COLUMN] != "True":
+        if blm_column >= len(jobrow):
+            continue
+
+        if jobrow[blm_column] != "True":
             continue
 
         stats = {
