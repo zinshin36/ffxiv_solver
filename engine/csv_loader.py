@@ -24,6 +24,17 @@ def load_csv(name):
     return rows
 
 
+def find_col(header, text):
+
+    text = text.lower()
+
+    for i, col in enumerate(header):
+        if text in col.lower():
+            return i
+
+    raise Exception(f"Column containing '{text}' not found")
+
+
 def to_int(v):
 
     if v is None:
