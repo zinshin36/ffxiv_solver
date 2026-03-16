@@ -1,45 +1,69 @@
 from engine.logger import log
-from engine.data_parser import filter_items
-from engine.materia_system import optimize_materia
+import itertools
 
 
-def score_build(stats):
+def score_build(build):
 
-    crit = stats.get("criticalhit", 0)
-    det = stats.get("determination", 0)
-    dh = stats.get("directhitrate", 0)
-    sps = stats.get("spellspeed", 0)
+    stats = {}
 
-    return crit * 1.0 + det * 0.9 + dh * 0.95 + sps * 0.85
+    for item in build:
+
+        for k, v in item["stats"].items():
+
+            stats[k] = stats.get(k, 0) + v
+
+    crit = stats.get("CriticalHit", 0)
+    dh = stats.get("DirectHitRate", 0)
+    det = stats.get("Determination", 0)
+    sps = stats.get("SpellSpeed", 0)
+
+    # simple damage model
+    dps = crit * 1.2 + dh * 1.1 + det * 1.0 + sps * 0.8
+
+    return dps, stats
 
 
-def solve(items, materia, min_ilvl):
+def group_by_slot(items):
 
-    items = filter_items(items, min_ilvl)
+    slots = {}
 
-    if not items:
-        log("No items after filter")
-        return []
+    for i in items:
 
-    best_builds = []
+        s = i["slot"]
 
-    for item in items:
+        if s not in slots:
+            slots[s] = []
 
-        melds, stats = optimize_materia(item, materia)
+        slots[s].append(i)
 
-        score = score_build(stats)
+    return slots
 
-        build = {
-            "item": item["name"],
-            "ilvl": item["ilvl"],
-            "score": score,
-            "melds": melds
-        }
 
-        best_builds.append(build)
+def optimize(items):
 
-    best_builds.sort(key=lambda x: x["score"], reverse=True)
+    log("Starting solver")
 
-    log(f"Solver finished ({len(best_builds)} builds evaluated)")
+    slots = group_by_slot(items)
 
-    return best_builds[:5]
+    slot_items = list(slots.values())
+
+    best = []
+
+    count = 0
+
+    for combo in itertools.product(*slot_items):
+
+        count += 1
+
+        dps, stats = score_build(combo)
+
+        best.append((dps, combo))
+
+        best = sorted(best, key=lambda x: x[0], reverse=True)[:5]
+
+        if count % 5000 == 0:
+            log(f"Checked {count} builds")
+
+    log(f"Total builds checked: {count}")
+
+    return best
