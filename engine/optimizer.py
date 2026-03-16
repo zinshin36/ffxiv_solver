@@ -1,67 +1,75 @@
 from itertools import product
+from engine.dps_model import compute_dps
+from engine.materia_system import apply_materia
+from engine.spell_speed import matches_target
 
-from engine.materia_system import optimize_item_melds
-from engine.food_system import FOODS, apply_food
-from engine.dps_model import expected_dps
-from engine.blm_math import tier_bonus
+
+def group_by_slot(items):
+
+    slots = {}
+
+    for i in items:
+
+        s = i["slot"]
+
+        if s not in slots:
+            slots[s] = []
+
+        slots[s].append(i)
+
+    return slots
+
+
+def combine_stats(gear):
+
+    stats = {}
+
+    for g in gear:
+
+        for k, v in g["stats"].items():
+
+            stats[k] = stats.get(k, 0) + v
+
+    return stats
 
 
 def solve(items, materia, target_gcd):
 
-    slots = {}
-
-    for item in items:
-
-        slot = item["slot"]
-
-        if slot == "Ring":
-            slots.setdefault("Ring1", []).append(item)
-            slots.setdefault("Ring2", []).append(item)
-        else:
-            slots.setdefault(slot, []).append(item)
+    slots = group_by_slot(items)
 
     slot_lists = list(slots.values())
 
-    best = None
-    best_dps = 0
+    best = []
 
     for combo in product(*slot_lists):
 
-        merged = {}
-        build = []
+        stats = combine_stats(combo)
 
-        for item in combo:
+        if not matches_target(stats.get("sps", 0), target_gcd):
+            continue
 
-            def eval_stats(stats):
+        melded = []
+        meld_names = []
 
-                score = expected_dps(stats)
+        for g in combo:
 
-                sps = stats.get("SpellSpeed", 400)
+            s, meld = apply_materia(g, materia)
 
-                score += tier_bonus(sps, target_gcd)
+            melded.append(s)
+            meld_names.append((g["name"], meld))
 
-                return score
+        final = {}
 
-            stats, melds = optimize_item_melds(
-                item,
-                materia,
-                eval_stats
-            )
+        for s in melded:
 
-            build.append((item["name"], melds))
+            for k, v in s.items():
 
-            for k, v in stats.items():
-                merged[k] = merged.get(k, 0) + v
+                final[k] = final.get(k, 0) + v
 
-        for food in FOODS:
+        dps = compute_dps(final)
 
-            final = apply_food(merged, food)
+        best.append((dps, meld_names, final))
 
-            dps = expected_dps(final)
+        best = sorted(best, reverse=True)[:5]
 
-            if dps > best_dps:
-
-                best_dps = dps
-                best = (build, final, food)
-
-    return best, best_dps
+    return best
