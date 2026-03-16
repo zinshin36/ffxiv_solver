@@ -12,7 +12,16 @@ STAT_NAMES = {
 
 
 def normalize(text):
+
     return text.lower().replace(" ", "").replace("_", "")
+
+
+def safe_get(row, index):
+
+    if index >= len(row):
+        return ""
+
+    return row[index]
 
 
 def discover_columns(header):
@@ -70,16 +79,16 @@ def parse_stats(row, stat_pairs):
 
     for stat_col, val_col in stat_pairs:
 
-        if stat_col >= len(row):
-            continue
+        stat_name = normalize(safe_get(row, stat_col))
 
-        stat_name = normalize(row[stat_col])
+        if not stat_name:
+            continue
 
         for key in STAT_NAMES:
 
             if key in stat_name:
 
-                stats[STAT_NAMES[key]] = to_int(row[val_col])
+                stats[STAT_NAMES[key]] = to_int(safe_get(row, val_col))
 
     return stats
 
@@ -99,19 +108,25 @@ def load_all_items():
 
     for r in rows[3:]:
 
-        name = r[cols["name"]]
+        name = safe_get(r, cols["name"])
 
         if not name:
             continue
 
-        ilvl = to_int(r[cols["ilvl"]])
+        ilvl = to_int(safe_get(r, cols["ilvl"]))
+
+        slot = safe_get(r, cols["slot"])
+
+        materia_slots = to_int(safe_get(r, cols["materia"]))
+
+        stats = parse_stats(r, stat_pairs)
 
         item = {
             "name": name,
-            "slot": r[cols["slot"]],
-            "materia_slots": to_int(r[cols["materia"]]),
+            "slot": slot,
+            "materia_slots": materia_slots,
             "ilvl": ilvl,
-            "stats": parse_stats(r, stat_pairs)
+            "stats": stats
         }
 
         items.append(item)
