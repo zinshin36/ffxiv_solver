@@ -2,7 +2,6 @@ import csv
 import os
 from engine.logger import log
 
-
 DATA_PATH = "game_data"
 
 
@@ -15,31 +14,41 @@ def load_csv(filename):
 
     rows = []
 
-    with open(path, encoding="utf-8") as f:
-
+    with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
 
         for r in reader:
-            rows.append(r)
+            rows.append([c.strip() if c else "" for c in r])
 
     log(f"{filename} loaded ({len(rows)} rows)")
 
     return rows
 
 
-def to_int(value):
+def to_int(v):
 
-    if value is None:
+    if v is None:
         return 0
 
-    if value == "":
-        return 0
+    if isinstance(v, int):
+        return v
 
-    try:
-        return int(value)
+    if isinstance(v, float):
+        return int(v)
 
-    except:
-        try:
-            return int(float(value))
-        except:
+    if isinstance(v, str):
+
+        v = v.strip()
+
+        if v == "":
             return 0
+
+        try:
+            return int(v)
+        except:
+            try:
+                return int(float(v))
+            except:
+                return 0
+
+    return 0
