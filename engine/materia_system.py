@@ -1,4 +1,4 @@
-from engine.csv_loader import load_csv, to_int
+from engine.csv_loader import load_csv, find_col, to_int
 
 
 def load_materia():
@@ -7,9 +7,9 @@ def load_materia():
 
     header = rows[1]
 
-    name_col = header.index("Name")
-    stat_col = header.index("BaseParam")
-    val_col = header.index("Value")
+    name_col = find_col(header, "Name")
+    stat_col = find_col(header, "BaseParam")
+    val_col = find_col(header, "Value")
 
     materia = []
 
@@ -29,26 +29,38 @@ def load_materia():
     return materia
 
 
-def apply_materia(item, materia_list):
-
-    stats = dict(item["stats"])
+def best_materia(item, materia):
 
     melds = []
+    stats = dict(item["stats"])
 
-    for m in materia_list[:item["materia_slots"]]:
+    cap = item["ilvl"] * 2
 
-        stat = m["stat"]
+    for _ in range(item["materia_slots"]):
 
-        val = m["value"]
+        best = None
+        best_gain = 0
 
-        cap = item["stats"].get(stat, 0) + 200
+        for m in materia:
 
-        new_val = stats.get(stat, 0) + val
+            stat = m["stat"]
+            val = m["value"]
 
-        if new_val > cap:
-            continue
+            current = stats.get(stat, 0)
 
-        stats[stat] = new_val
-        melds.append(m)
+            if current + val > cap:
+                continue
+
+            if val > best_gain:
+
+                best = m
+                best_gain = val
+
+        if not best:
+            break
+
+        stats[best["stat"]] = stats.get(best["stat"], 0) + best["value"]
+
+        melds.append(best)
 
     return stats, melds
