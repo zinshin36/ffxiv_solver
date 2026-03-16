@@ -2,22 +2,15 @@ from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
 
-def normalize(s):
-
-    if not s:
+def normalize(t):
+    if not t:
         return ""
-
-    return s.lower().replace(" ", "").replace("_", "")
+    return t.lower().replace(" ", "").replace("_", "")
 
 
 def safe_get(row, idx):
-
-    if idx is None:
+    if idx is None or idx >= len(row):
         return ""
-
-    if idx >= len(row):
-        return ""
-
     return row[idx]
 
 
@@ -26,18 +19,16 @@ def detect_column(header, keywords):
     header_norm = [normalize(h) for h in header]
 
     for i, col in enumerate(header_norm):
-
         for k in keywords:
-
             if k in col:
                 return i
 
     return None
 
 
-# -------------------------
-# BUILD ITEMLEVEL TABLE
-# -------------------------
+# -------------------------------------------------
+# ITEMLEVEL TABLE
+# -------------------------------------------------
 
 def build_itemlevel_table():
 
@@ -45,8 +36,16 @@ def build_itemlevel_table():
 
     header = rows[1]
 
+    log(f"ItemLevel headers: {header}")
+
     key_col = detect_column(header, ["key"])
     ilvl_col = detect_column(header, ["itemlevel", "level"])
+
+    if key_col is None:
+        key_col = 0
+
+    if ilvl_col is None:
+        ilvl_col = 1
 
     table = {}
 
@@ -65,9 +64,9 @@ def build_itemlevel_table():
     return table
 
 
-# -------------------------
+# -------------------------------------------------
 # STAT PAIRS
-# -------------------------
+# -------------------------------------------------
 
 def discover_stat_pairs(header):
 
@@ -83,9 +82,9 @@ def discover_stat_pairs(header):
     return pairs
 
 
-# -------------------------
-# PARSE STATS
-# -------------------------
+# -------------------------------------------------
+# STAT PARSER
+# -------------------------------------------------
 
 def parse_stats(row, stat_pairs):
 
@@ -93,24 +92,21 @@ def parse_stats(row, stat_pairs):
 
     for stat_col, val_col in stat_pairs:
 
-        stat_name = normalize(safe_get(row, stat_col))
-
-        if not stat_name:
-            continue
+        stat = normalize(safe_get(row, stat_col))
 
         val = to_int(safe_get(row, val_col))
 
         if val <= 0:
             continue
 
-        stats[stat_name] = val
+        stats[stat] = val
 
     return stats
 
 
-# -------------------------
-# LOAD ALL ITEMS
-# -------------------------
+# -------------------------------------------------
+# LOAD ITEMS
+# -------------------------------------------------
 
 def load_all_items():
 
@@ -122,8 +118,8 @@ def load_all_items():
 
     name_col = detect_column(header, ["name", "singular"])
     slot_col = detect_column(header, ["equipslot"])
-    materia_col = detect_column(header, ["materiaslotcount"])
-    level_key_col = detect_column(header, ["levelitem", "level{item}", "level"])
+    materia_col = detect_column(header, ["materiaslot"])
+    level_key_col = detect_column(header, ["levelitem", "level"])
 
     stat_pairs = discover_stat_pairs(header)
 
@@ -166,9 +162,9 @@ def load_all_items():
     return items, max_ilvl
 
 
-# -------------------------
-# FILTER BY ILVL
-# -------------------------
+# -------------------------------------------------
+# FILTER ITEMS
+# -------------------------------------------------
 
 def filter_items(items, min_ilvl):
 
@@ -176,9 +172,7 @@ def filter_items(items, min_ilvl):
 
     for i in items:
 
-        ilvl = to_int(i.get("ilvl"))
-
-        if ilvl >= min_ilvl:
+        if to_int(i.get("ilvl")) >= min_ilvl:
             filtered.append(i)
 
     log(f"Items after ilvl filter ({len(filtered)})")
