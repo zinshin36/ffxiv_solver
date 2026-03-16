@@ -1,164 +1,92 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog
 
+from engine.logger import log, init_logger
 from engine.data_parser import load_all_items, filter_items
-from engine.materia_system import load_materia
 from engine.optimizer import solve
-from engine.food_system import FOODS
-from engine.logger import log
 
 
-all_items = []
-materia = []
+items = []
 max_ilvl = 0
 
 
-class App:
+def load_game_data():
 
-    def __init__(self, root):
+    global items, max_ilvl
 
-        self.root = root
-        root.title("FFXIV Gear Solver")
+    try:
 
-        frame = tk.Frame(root, padx=10, pady=10)
-        frame.pack()
+        items, max_ilvl = load_all_items()
 
-        tk.Label(frame, text="Highest Detected iLvl").grid(row=0, column=0)
+        log(f"Game data loaded. Highest ilvl: {max_ilvl}")
 
-        self.max_ilvl_label = tk.Label(frame, text="Unknown")
-        self.max_ilvl_label.grid(row=0, column=1)
-
-        tk.Label(frame, text="Minimum iLvl").grid(row=1, column=0)
-
-        self.ilvl_entry = tk.Entry(frame)
-        self.ilvl_entry.insert(0, "0")
-        self.ilvl_entry.grid(row=1, column=1)
-
-        tk.Label(frame, text="Target GCD").grid(row=2, column=0)
-
-        self.gcd_entry = tk.Entry(frame)
-        self.gcd_entry.insert(0, "2.38")
-        self.gcd_entry.grid(row=2, column=1)
-
-        tk.Label(frame, text="Food").grid(row=3, column=0)
-
-        self.food_var = tk.StringVar()
-        self.food_var.set("None")
-
-        tk.OptionMenu(frame, self.food_var, *FOODS.keys()).grid(row=3, column=1)
-
-        tk.Button(
-            frame,
-            text="Load Game Data",
-            command=self.load_data,
-            width=25
-        ).grid(row=4, column=0, columnspan=2, pady=5)
-
-        tk.Button(
-            frame,
-            text="Run Solver",
-            command=self.run_solver,
-            width=25
-        ).grid(row=5, column=0, columnspan=2, pady=5)
-
-        self.output = tk.Text(root, width=95, height=28)
-        self.output.pack(pady=10)
-
-        log("Application started")
-
-    def load_data(self):
-
-        global all_items, materia, max_ilvl
-
-        try:
-
-            all_items, max_ilvl = load_all_items()
-
-            materia = load_materia()
-
-            self.max_ilvl_label.config(text=str(max_ilvl))
-
-            self.ilvl_entry.delete(0, tk.END)
-            self.ilvl_entry.insert(0, str(max_ilvl - 20))
-
-            messagebox.showinfo(
-                "Data Loaded",
-                f"{len(all_items)} items loaded\nMax iLvl: {max_ilvl}"
-            )
-
-        except Exception as e:
-
-            messagebox.showerror("Error", str(e))
-
-    def run_solver(self):
-
-        global all_items, materia
-
-        if not all_items:
-
-            messagebox.showerror("Error", "Load game data first")
-            return
-
-        try:
-
-            min_ilvl = int(self.ilvl_entry.get())
-            gcd = float(self.gcd_entry.get())
-
-        except:
-
-            messagebox.showerror("Error", "Invalid numeric input")
-            return
-
-        items = filter_items(all_items, min_ilvl)
-
-        if not items:
-
-            messagebox.showerror("Error", "No items after filter")
-            return
-
-        result, dps = solve(items, materia, gcd)
-
-        build, stats, food = result
-
-        self.output.delete("1.0", tk.END)
-
-        self.output.insert(tk.END, f"Best DPS: {dps:.2f}\n\n")
-
-        self.output.insert(tk.END, "Gear + Melds\n\n")
-
-        for name, melds in build:
-
-            meld_names = []
-
-            for m in melds:
-
-                if isinstance(m, dict):
-                    meld_names.append(m.get("name", "Unknown Materia"))
-                else:
-                    meld_names.append(str(m))
-
-            meld_text = ", ".join(meld_names) if meld_names else "No Melds"
-
-            self.output.insert(
-                tk.END,
-                f"{name}\n   Materia: {meld_text}\n\n"
-            )
-
-        self.output.insert(tk.END, "Final Stats\n\n")
-
-        for k, v in stats.items():
-
-            self.output.insert(tk.END, f"{k}: {v}\n")
+    except Exception as e:
+        log(f"error: {e}")
 
 
-def main():
+def run_solver():
 
-    root = tk.Tk()
+    global items
 
-    App(root)
+    if not items:
+        log("No data loaded.")
+        return
 
-    root.mainloop()
+    try:
+
+        min_ilvl = int(min_ilvl_entry.get())
+
+    except:
+        log("Invalid min ilvl")
+        return
+
+    filtered = filter_items(items, min_ilvl)
+
+    if not filtered:
+        log("No items after filtering")
+        return
+
+    log("Running solver...")
+
+    results = solve(filtered)
+
+    if not results:
+        log("Solver returned no builds")
+        return
+
+    for build in results:
+
+        log(f"Build {build['rank']}  DPS: {round(build['dps'],2)}")
+
+        for item in build["items"]:
+            log(f"   {item}")
+
+        log("")
 
 
-if __name__ == "__main__":
-    main()
+init_logger()
+
+root = tk.Tk()
+root.title("FFXIV Gear Solver")
+
+
+load_btn = tk.Button(root, text="Load Game Data", command=load_game_data)
+load_btn.pack()
+
+
+tk.Label(root, text="Min ilvl").pack()
+
+min_ilvl_entry = tk.Entry(root)
+min_ilvl_entry.insert(0, "760")
+min_ilvl_entry.pack()
+
+
+solve_btn = tk.Button(root, text="Run Solver", command=run_solver)
+solve_btn.pack()
+
+
+log_box = tk.Text(root, height=20, width=80)
+log_box.pack()
+
+
+root.mainloop()
