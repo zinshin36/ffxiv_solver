@@ -1,4 +1,4 @@
-from engine.csv_loader import load_csv, find_col, to_int
+from engine.csv_loader import load_csv, to_int
 
 
 def load_materia():
@@ -7,9 +7,18 @@ def load_materia():
 
     header = rows[1]
 
-    name_col = find_col(header, "Name")
-    stat_col = find_col(header, "BaseParam")
-    val_col = find_col(header, "Value")
+    name_col = header.index("Name")
+
+    stat_col = None
+    val_col = None
+
+    for i, h in enumerate(header):
+
+        if "BaseParam" in h:
+            stat_col = i
+
+        if "Value" in h:
+            val_col = i
 
     materia = []
 
@@ -29,12 +38,11 @@ def load_materia():
     return materia
 
 
-def best_materia(item, materia):
+def optimize_materia(item, materia):
 
-    melds = []
     stats = dict(item["stats"])
 
-    cap = item["ilvl"] * 2
+    melds = []
 
     for _ in range(item["materia_slots"]):
 
@@ -43,24 +51,16 @@ def best_materia(item, materia):
 
         for m in materia:
 
-            stat = m["stat"]
             val = m["value"]
 
-            current = stats.get(stat, 0)
-
-            if current + val > cap:
-                continue
-
             if val > best_gain:
-
                 best = m
                 best_gain = val
 
-        if not best:
-            break
+        if best:
 
-        stats[best["stat"]] = stats.get(best["stat"], 0) + best["value"]
+            stats[best["stat"]] = stats.get(best["stat"], 0) + best["value"]
 
-        melds.append(best)
+            melds.append(best)
 
     return stats, melds
