@@ -31,9 +31,7 @@ def find_baseparam_pairs(header):
 
         if col.startswith("BaseParam["):
 
-            value_col = i + 1
-
-            pairs.append((i, value_col))
+            pairs.append((i, i + 1))
 
     return pairs
 
@@ -62,17 +60,14 @@ def parse_stats(row, stat_pairs):
     return stats
 
 
-def load_items(min_ilvl):
+def load_all_items():
 
     rows = load_csv("Item.csv")
-
-    if len(rows) < 4:
-        raise Exception("Item.csv malformed")
 
     header = rows[1]
 
     name_col = find_column(header, "Name")
-    ilvl_col = find_column(header, "Level{Item}")
+    ilvl_col = find_column(header, "Level")
     job_col = find_column(header, "ClassJobCategory")
     slot_col = find_column(header, "EquipSlotCategory")
     materia_col = find_column(header, "MateriaSlotCount")
@@ -82,6 +77,8 @@ def load_items(min_ilvl):
     log(f"Stat pairs detected: {len(stat_pairs)}")
 
     items = []
+
+    max_ilvl = 0
 
     for r in rows[3:]:
 
@@ -97,13 +94,8 @@ def load_items(min_ilvl):
         if not name:
             continue
 
-        if ilvl < min_ilvl:
+        if jobs and "BLM" not in jobs and "THM" not in jobs:
             continue
-
-        if jobs:
-
-            if "BLM" not in jobs and "THM" not in jobs:
-                continue
 
         stats = parse_stats(r, stat_pairs)
 
@@ -117,6 +109,19 @@ def load_items(min_ilvl):
 
         items.append(item)
 
-    log(f"Items parsed ({len(items)})")
+        if ilvl > max_ilvl:
+            max_ilvl = ilvl
 
-    return items
+    log(f"Items parsed ({len(items)})")
+    log(f"Highest item level detected: {max_ilvl}")
+
+    return items, max_ilvl
+
+
+def filter_items(items, min_ilvl):
+
+    filtered = [i for i in items if i["ilvl"] >= min_ilvl]
+
+    log(f"Items after ilvl filter ({len(filtered)}) min_ilvl={min_ilvl}")
+
+    return filtered
