@@ -26,36 +26,23 @@ def detect_column(header, keywords):
     return None
 
 
-# -------------------------------------------------
-# ITEMLEVEL TABLE
-# -------------------------------------------------
+# ------------------------------------
+# ITEMLEVEL TABLE (ROW INDEX = ILVL)
+# ------------------------------------
 
 def build_itemlevel_table():
 
     rows = load_csv("ItemLevel.csv")
 
-    header = rows[1]
-
-    log(f"ItemLevel headers: {header}")
-
-    key_col = detect_column(header, ["key"])
-    ilvl_col = detect_column(header, ["itemlevel", "level"])
-
-    if key_col is None:
-        key_col = 0
-
-    if ilvl_col is None:
-        ilvl_col = 1
-
     table = {}
 
-    for r in rows[3:]:
+    for i, r in enumerate(rows):
 
-        key = to_int(safe_get(r, key_col))
-        ilvl = to_int(safe_get(r, ilvl_col))
-
-        if key <= 0:
+        if i < 3:
             continue
+
+        ilvl = i - 3
+        key = to_int(r[0])
 
         table[key] = ilvl
 
@@ -64,16 +51,15 @@ def build_itemlevel_table():
     return table
 
 
-# -------------------------------------------------
+# ------------------------------------
 # STAT PAIRS
-# -------------------------------------------------
+# ------------------------------------
 
 def discover_stat_pairs(header):
 
     pairs = []
 
     for i, col in enumerate(header):
-
         if col.startswith("BaseParam["):
             pairs.append((i, i + 1))
 
@@ -82,9 +68,9 @@ def discover_stat_pairs(header):
     return pairs
 
 
-# -------------------------------------------------
+# ------------------------------------
 # STAT PARSER
-# -------------------------------------------------
+# ------------------------------------
 
 def parse_stats(row, stat_pairs):
 
@@ -93,7 +79,6 @@ def parse_stats(row, stat_pairs):
     for stat_col, val_col in stat_pairs:
 
         stat = normalize(safe_get(row, stat_col))
-
         val = to_int(safe_get(row, val_col))
 
         if val <= 0:
@@ -104,9 +89,9 @@ def parse_stats(row, stat_pairs):
     return stats
 
 
-# -------------------------------------------------
+# ------------------------------------
 # LOAD ITEMS
-# -------------------------------------------------
+# ------------------------------------
 
 def load_all_items():
 
@@ -162,9 +147,9 @@ def load_all_items():
     return items, max_ilvl
 
 
-# -------------------------------------------------
+# ------------------------------------
 # FILTER ITEMS
-# -------------------------------------------------
+# ------------------------------------
 
 def filter_items(items, min_ilvl):
 
