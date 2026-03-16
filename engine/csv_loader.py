@@ -1,30 +1,40 @@
 import csv
 import os
-from engine.logger import log
 
 DATA_DIR = "game_data"
 
 
-def load_csv(filename):
+def csv_path(name):
+    return os.path.join(DATA_DIR, name)
 
-    path = os.path.join(DATA_DIR, filename)
+
+def load_csv(name):
+
+    path = csv_path(name)
 
     if not os.path.exists(path):
-        log(f"Missing CSV: {filename}")
-        return []
+        raise Exception(f"{name} not found in game_data")
 
     with open(path, encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         rows = list(reader)
 
-    log(f"{filename} loaded ({len(rows)} rows)")
+    print(f"{name} loaded ({len(rows)} rows)")
 
     return rows
 
 
 def to_int(v):
 
+    if v is None:
+        return 0
+
+    v = str(v).strip()
+
+    if v == "":
+        return 0
+
     try:
-        return int(v)
+        return int(float(v))
     except:
         return 0
