@@ -1,96 +1,45 @@
-from itertools import product
-
-from engine.dominance import prune
-from engine.dps_model import compute_dps
+from engine.logger import log
+from engine.data_parser import filter_items
 from engine.materia_system import optimize_materia
-from engine.spell_speed import matches_target
-from engine.food_system import apply_food
 
 
-def group_slots(items):
+def score_build(stats):
 
-    slots = {}
+    crit = stats.get("criticalhit", 0)
+    det = stats.get("determination", 0)
+    dh = stats.get("directhitrate", 0)
+    sps = stats.get("spellspeed", 0)
 
-    for i in items:
-
-        s = i["slot"]
-
-        if s not in slots:
-            slots[s] = []
-
-        slots[s].append(i)
-
-    for k in slots:
-
-        slots[k] = prune(slots[k])
-
-    return slots
+    return crit * 1.0 + det * 0.9 + dh * 0.95 + sps * 0.85
 
 
-def ring_rule(combo):
+def solve(items, materia, min_ilvl):
 
-    rings = [x for x in combo if "Ring" in x["name"]]
+    items = filter_items(items, min_ilvl)
 
-    if len(rings) < 2:
-        return True
+    if not items:
+        log("No items after filter")
+        return []
 
-    return rings[0]["name"] != rings[1]["name"]
+    best_builds = []
 
+    for item in items:
 
-def combine_stats(stats_list):
+        melds, stats = optimize_materia(item, materia)
 
-    result = {}
+        score = score_build(stats)
 
-    for s in stats_list:
+        build = {
+            "item": item["name"],
+            "ilvl": item["ilvl"],
+            "score": score,
+            "melds": melds
+        }
 
-        for k, v in s.items():
+        best_builds.append(build)
 
-            result[k] = result.get(k, 0) + v
+    best_builds.sort(key=lambda x: x["score"], reverse=True)
 
-    return result
+    log(f"Solver finished ({len(best_builds)} builds evaluated)")
 
-
-def solve(items, materia, target_gcd, food):
-
-    slots = group_slots(items)
-
-    slot_lists = list(slots.values())
-
-    best = []
-
-    tested = 0
-
-    for combo in product(*slot_lists):
-
-        if not ring_rule(combo):
-            continue
-
-        tested += 1
-
-        melded = []
-        meld_names = []
-
-        for g in combo:
-
-            s, m = optimize_materia(g, materia)
-
-            melded.append(s)
-            meld_names.append((g["name"], m))
-
-        stats = combine_stats(melded)
-
-        stats = apply_food(stats, food)
-
-        if not matches_target(stats.get("sps", 0), target_gcd):
-            continue
-
-        dps = compute_dps(stats)
-
-        best.append((dps, meld_names, stats))
-
-        best = sorted(best, reverse=True)[:5]
-
-        if tested % 100000 == 0:
-            print("tested builds:", tested)
-
-    return best
+    return best_builds[:5]
