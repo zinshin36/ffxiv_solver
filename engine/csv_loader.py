@@ -1,51 +1,45 @@
 import csv
 import os
-
-DATA_DIR = "game_data"
-
-
-def csv_path(name):
-    return os.path.join(DATA_DIR, name)
+from engine.logger import log
 
 
-def load_csv(name):
+DATA_PATH = "game_data"
 
-    path = csv_path(name)
+
+def load_csv(filename):
+
+    path = os.path.join(DATA_PATH, filename)
 
     if not os.path.exists(path):
-        raise Exception(f"{name} not found in game_data")
+        raise Exception(f"{filename} not found in game_data folder")
 
-    with open(path, encoding="utf-8-sig") as f:
+    rows = []
+
+    with open(path, encoding="utf-8") as f:
+
         reader = csv.reader(f)
-        rows = list(reader)
 
-    print(f"{name} loaded ({len(rows)} rows)")
+        for r in reader:
+            rows.append(r)
+
+    log(f"{filename} loaded ({len(rows)} rows)")
 
     return rows
 
 
-def find_col(header, text):
+def to_int(value):
 
-    text = text.lower()
-
-    for i, col in enumerate(header):
-        if text in col.lower():
-            return i
-
-    raise Exception(f"Column containing '{text}' not found")
-
-
-def to_int(v):
-
-    if v is None:
+    if value is None:
         return 0
 
-    v = str(v).strip()
-
-    if v == "":
+    if value == "":
         return 0
 
     try:
-        return int(float(v))
+        return int(value)
+
     except:
-        return 0
+        try:
+            return int(float(value))
+        except:
+            return 0
