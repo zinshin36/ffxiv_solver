@@ -3,10 +3,10 @@ from engine.logger import log
 
 
 STAT_NAMES = {
-    "critical hit": "crit",
+    "criticalhit": "crit",
     "determination": "det",
-    "direct hit": "dh",
-    "spell speed": "sps",
+    "directhit": "dh",
+    "spellspeed": "sps",
     "intelligence": "int"
 }
 
@@ -19,36 +19,31 @@ def discover_columns(header):
 
     cols = {}
 
-    normalized = [normalize(h) for h in header]
+    for i, h in enumerate(header):
 
-    for i, h in enumerate(normalized):
+        n = normalize(h)
 
-        if "name" == h:
+        if n == "name":
             cols["name"] = i
 
-        elif "equipslotcategory" in h:
+        elif "equipslotcategory" in n:
             cols["slot"] = i
 
-        elif "materiaslotcount" in h:
-            cols["materia_slots"] = i
+        elif "materiaslotcount" in n:
+            cols["materia"] = i
 
-        elif "level" in h and "item" in h:
+        elif "level" in n and "item" in n:
             cols["ilvl"] = i
 
-        elif "levelitem" == h:
+        elif n == "level":
             cols["ilvl"] = i
 
-        elif h == "level":
-            cols["ilvl"] = i
+    required = ["name", "slot", "materia", "ilvl"]
 
-    missing = []
-
-    for k in ["name", "slot", "materia_slots", "ilvl"]:
-        if k not in cols:
-            missing.append(k)
+    missing = [x for x in required if x not in cols]
 
     if missing:
-        raise Exception(f"Required columns missing: {missing}")
+        raise Exception(f"Missing required columns: {missing}")
 
     log(f"Detected columns: {cols}")
 
@@ -78,17 +73,13 @@ def parse_stats(row, stat_pairs):
         if stat_col >= len(row):
             continue
 
-        stat_name = row[stat_col]
+        stat_name = normalize(row[stat_col])
 
-        if not stat_name:
-            continue
+        for key in STAT_NAMES:
 
-        key = normalize(stat_name)
+            if key in stat_name:
 
-        for name in STAT_NAMES:
-
-            if name.replace(" ", "") in key:
-                stats[STAT_NAMES[name]] = to_int(row[val_col])
+                stats[STAT_NAMES[key]] = to_int(row[val_col])
 
     return stats
 
@@ -99,7 +90,7 @@ def load_all_items():
 
     header = rows[1]
 
-    columns = discover_columns(header)
+    cols = discover_columns(header)
 
     stat_pairs = discover_stat_pairs(header)
 
@@ -108,28 +99,19 @@ def load_all_items():
 
     for r in rows[3:]:
 
-        if len(r) <= columns["name"]:
-            continue
-
-        name = r[columns["name"]]
+        name = r[cols["name"]]
 
         if not name:
             continue
 
-        ilvl = to_int(r[columns["ilvl"]])
-
-        slot = r[columns["slot"]]
-
-        materia_slots = to_int(r[columns["materia_slots"]])
-
-        stats = parse_stats(r, stat_pairs)
+        ilvl = to_int(r[cols["ilvl"]])
 
         item = {
             "name": name,
-            "slot": slot,
+            "slot": r[cols["slot"]],
+            "materia_slots": to_int(r[cols["materia"]]),
             "ilvl": ilvl,
-            "materia_slots": materia_slots,
-            "stats": stats
+            "stats": parse_stats(r, stat_pairs)
         }
 
         items.append(item)
@@ -147,6 +129,6 @@ def filter_items(items, min_ilvl):
 
     filtered = [i for i in items if i["ilvl"] >= min_ilvl]
 
-    log(f"Items after ilvl filter ({len(filtered)}) min_ilvl={min_ilvl}")
+    log(f"Items after ilvl filter ({len(filtered)})")
 
     return filtered
