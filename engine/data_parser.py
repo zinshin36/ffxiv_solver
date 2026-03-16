@@ -5,23 +5,28 @@ from engine.logger import log
 def normalize(text):
     if not text:
         return ""
-    return text.lower().replace(" ", "").replace("_", "")
+    return text.lower().replace(" ", "").replace("_", "").replace("{", "").replace("}", "")
 
 
 def safe_get(row, idx):
+
     if idx is None:
         return ""
+
     if idx >= len(row):
         return ""
+
     return row[idx]
 
 
 def detect_column(header, keywords):
 
-    header_norm = [normalize(h) for h in header]
+    normalized = [normalize(h) for h in header]
 
-    for i, col in enumerate(header_norm):
+    for i, col in enumerate(normalized):
+
         for k in keywords:
+
             if k in col:
                 return i
 
@@ -29,7 +34,7 @@ def detect_column(header, keywords):
 
 
 # --------------------------------
-# STAT PAIR DISCOVERY
+# STAT PAIRS
 # --------------------------------
 
 def discover_stat_pairs(header):
@@ -56,13 +61,14 @@ def parse_stats(row, stat_pairs):
 
     for stat_col, val_col in stat_pairs:
 
-        stat = normalize(safe_get(row, stat_col))
+        stat_name = normalize(safe_get(row, stat_col))
+
         val = to_int(safe_get(row, val_col))
 
         if val <= 0:
             continue
 
-        stats[stat] = val
+        stats[stat_name] = val
 
     return stats
 
@@ -77,10 +83,14 @@ def load_all_items():
 
     header = rows[1]
 
+    log(f"Item headers detected ({len(header)} columns)")
+
     name_col = detect_column(header, ["name", "singular"])
     slot_col = detect_column(header, ["equipslot"])
     materia_col = detect_column(header, ["materiaslot"])
-    ilvl_col = detect_column(header, ["levelitem"])
+    ilvl_col = detect_column(header, ["levelitem", "itemlevel", "level"])
+
+    log(f"Detected columns -> name:{name_col} slot:{slot_col} materia:{materia_col} ilvl:{ilvl_col}")
 
     stat_pairs = discover_stat_pairs(header)
 
@@ -127,7 +137,12 @@ def load_all_items():
 
 def filter_items(items, min_ilvl):
 
-    filtered = [i for i in items if i["ilvl"] >= min_ilvl]
+    filtered = []
+
+    for i in items:
+
+        if to_int(i.get("ilvl")) >= min_ilvl:
+            filtered.append(i)
 
     log(f"Items after ilvl filter ({len(filtered)})")
 
