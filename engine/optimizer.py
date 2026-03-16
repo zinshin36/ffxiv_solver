@@ -1,30 +1,31 @@
 from itertools import product
+
 from engine.dps_model import compute_dps
-from engine.materia_system import apply_materia
-from engine.spell_speed import matches_target
+from engine.materia_system import best_materia
+from engine.food_system import apply_food
 
 
-def group_by_slot(items):
+def group_slots(items):
 
     slots = {}
 
     for i in items:
 
-        s = i["slot"]
+        slot = i["slot"]
 
-        if s not in slots:
-            slots[s] = []
+        if slot not in slots:
+            slots[slot] = []
 
-        slots[s].append(i)
+        slots[slot].append(i)
 
     return slots
 
 
-def combine_stats(gear):
+def combine_stats(items):
 
     stats = {}
 
-    for g in gear:
+    for g in items:
 
         for k, v in g["stats"].items():
 
@@ -33,9 +34,19 @@ def combine_stats(gear):
     return stats
 
 
-def solve(items, materia, target_gcd):
+def ring_rule(combo):
 
-    slots = group_by_slot(items)
+    rings = [i for i in combo if "Ring" in i["name"]]
+
+    if len(rings) < 2:
+        return True
+
+    return rings[0]["name"] != rings[1]["name"]
+
+
+def solve(items, materia, food):
+
+    slots = group_slots(items)
 
     slot_lists = list(slots.values())
 
@@ -43,32 +54,31 @@ def solve(items, materia, target_gcd):
 
     for combo in product(*slot_lists):
 
-        stats = combine_stats(combo)
-
-        if not matches_target(stats.get("sps", 0), target_gcd):
+        if not ring_rule(combo):
             continue
 
-        melded = []
-        meld_names = []
+        melded_items = []
+        melds = []
 
         for g in combo:
 
-            s, meld = apply_materia(g, materia)
+            s, m = best_materia(g, materia)
 
-            melded.append(s)
-            meld_names.append((g["name"], meld))
+            melded_items.append(s)
+            melds.append((g["name"], m))
 
-        final = {}
+        stats = {}
 
-        for s in melded:
+        for s in melded_items:
 
             for k, v in s.items():
+                stats[k] = stats.get(k, 0) + v
 
-                final[k] = final.get(k, 0) + v
+        stats = apply_food(stats, food)
 
-        dps = compute_dps(final)
+        dps = compute_dps(stats)
 
-        best.append((dps, meld_names, final))
+        best.append((dps, melds, stats))
 
         best = sorted(best, reverse=True)[:5]
 
