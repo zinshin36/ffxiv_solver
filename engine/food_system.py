@@ -2,27 +2,34 @@ FOODS = {
 
     "None": {},
 
-    "Crit Food": {
-        "CriticalHit": 100,
-        "Determination": 60
+    "Raid Food":
+
+    {
+        "crit": (0.10, 120),
+        "det": (0.10, 120)
     },
 
-    "SpS Food": {
-        "SpellSpeed": 100,
-        "CriticalHit": 60
-    }
+    "Spell Speed Food":
 
+    {
+        "sps": (0.10, 120),
+        "crit": (0.05, 80)
+    }
 }
 
 
 def apply_food(stats, food):
 
-    if food not in FOODS:
-        return stats
+    buff = FOODS.get(food, {})
 
-    s = stats.copy()
+    result = dict(stats)
 
-    for k, v in FOODS[food].items():
-        s[k] = s.get(k, 0) + v
+    for stat, (pct, cap) in buff.items():
 
-    return s
+        base = result.get(stat, 0)
+
+        bonus = min(int(base * pct), cap)
+
+        result[stat] = base + bonus
+
+    return result
