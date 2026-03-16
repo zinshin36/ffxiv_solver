@@ -1,17 +1,61 @@
-from engine.csv_loader import load_csv, find_col, to_int
+from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
 
-STAT_MAP = {
-    "Critical Hit": "crit",
-    "Determination": "det",
-    "Direct Hit Rate": "dh",
-    "Spell Speed": "sps",
-    "Intelligence": "int"
+STAT_NAMES = {
+    "critical hit": "crit",
+    "determination": "det",
+    "direct hit": "dh",
+    "spell speed": "sps",
+    "intelligence": "int"
 }
 
 
-def find_stat_pairs(header):
+def normalize(text):
+    return text.lower().replace(" ", "").replace("_", "")
+
+
+def discover_columns(header):
+
+    cols = {}
+
+    normalized = [normalize(h) for h in header]
+
+    for i, h in enumerate(normalized):
+
+        if "name" == h:
+            cols["name"] = i
+
+        elif "equipslotcategory" in h:
+            cols["slot"] = i
+
+        elif "materiaslotcount" in h:
+            cols["materia_slots"] = i
+
+        elif "level" in h and "item" in h:
+            cols["ilvl"] = i
+
+        elif "levelitem" == h:
+            cols["ilvl"] = i
+
+        elif h == "level":
+            cols["ilvl"] = i
+
+    missing = []
+
+    for k in ["name", "slot", "materia_slots", "ilvl"]:
+        if k not in cols:
+            missing.append(k)
+
+    if missing:
+        raise Exception(f"Required columns missing: {missing}")
+
+    log(f"Detected columns: {cols}")
+
+    return cols
+
+
+def discover_stat_pairs(header):
 
     pairs = []
 
@@ -20,24 +64,31 @@ def find_stat_pairs(header):
         if col.startswith("BaseParam["):
             pairs.append((i, i + 1))
 
+    log(f"Stat pairs detected: {len(pairs)}")
+
     return pairs
 
 
-def parse_stats(row, pairs):
+def parse_stats(row, stat_pairs):
 
     stats = {}
 
-    for stat_col, val_col in pairs:
+    for stat_col, val_col in stat_pairs:
 
         if stat_col >= len(row):
             continue
 
-        stat = row[stat_col]
+        stat_name = row[stat_col]
 
-        if stat not in STAT_MAP:
+        if not stat_name:
             continue
 
-        stats[STAT_MAP[stat]] = to_int(row[val_col])
+        key = normalize(stat_name)
+
+        for name in STAT_NAMES:
+
+            if name.replace(" ", "") in key:
+                stats[STAT_NAMES[name]] = to_int(row[val_col])
 
     return stats
 
@@ -48,35 +99,36 @@ def load_all_items():
 
     header = rows[1]
 
-    name_col = find_col(header, "Name")
-    ilvl_col = find_col(header, "LevelItem")
-    slot_col = find_col(header, "EquipSlotCategory")
-    materia_col = find_col(header, "MateriaSlotCount")
+    columns = discover_columns(header)
 
-    stat_pairs = find_stat_pairs(header)
+    stat_pairs = discover_stat_pairs(header)
 
     items = []
     max_ilvl = 0
 
     for r in rows[3:]:
 
-        if len(r) <= name_col:
+        if len(r) <= columns["name"]:
             continue
 
-        name = r[name_col]
+        name = r[columns["name"]]
 
         if not name:
             continue
 
-        ilvl = to_int(r[ilvl_col])
+        ilvl = to_int(r[columns["ilvl"]])
+
+        slot = r[columns["slot"]]
+
+        materia_slots = to_int(r[columns["materia_slots"]])
 
         stats = parse_stats(r, stat_pairs)
 
         item = {
             "name": name,
-            "slot": r[slot_col],
+            "slot": slot,
             "ilvl": ilvl,
-            "materia_slots": to_int(r[materia_col]),
+            "materia_slots": materia_slots,
             "stats": stats
         }
 
