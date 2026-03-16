@@ -1,6 +1,3 @@
-import math
-
-
 def crit_multiplier(crit):
 
     rate = (crit - 400) / 1900 + 0.05
@@ -35,14 +32,10 @@ def compute_dps(stats):
     det = stats.get("det", 0)
     sps = stats.get("sps", 0)
 
-    base = INT
-
-    dmg = (
-        base *
+    return (
+        INT *
         crit_multiplier(crit) *
         dh_multiplier(dh) *
         det_multiplier(det) *
         sps_multiplier(sps)
     )
-
-    return dmg
