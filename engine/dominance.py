@@ -1,39 +1,41 @@
 def dominates(a, b):
 
-    if a["ilvl"] < b["ilvl"]:
-        return False
+    better_or_equal = True
+    strictly_better = False
 
-    better = False
+    for stat in ["crit", "det", "dh", "sps", "int"]:
 
-    for stat, val in a["stats"].items():
+        av = a["stats"].get(stat, 0)
+        bv = b["stats"].get(stat, 0)
 
-        if val < b["stats"].get(stat, 0):
-            return False
+        if av < bv:
+            better_or_equal = False
 
-        if val > b["stats"].get(stat, 0):
-            better = True
+        if av > bv:
+            strictly_better = True
 
-    return better
+    return better_or_equal and strictly_better
 
 
 def prune(items):
 
     result = []
 
-    for a in items:
+    for item in items:
 
         dominated = False
 
-        for b in items:
+        for other in items:
 
-            if a == b:
+            if other == item:
                 continue
 
-            if dominates(b, a):
+            if dominates(other, item):
+
                 dominated = True
                 break
 
         if not dominated:
-            result.append(a)
+            result.append(item)
 
     return result
