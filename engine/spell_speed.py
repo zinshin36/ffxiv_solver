@@ -9,4 +9,4 @@ def gcd_from_sps(sps):
 
 def matches_target(sps, target):
 
-    return abs(gcd_from_sps(sps) - target) <= 0.01
+    return abs(gcd_from_sps(sps) - target) < 0.01
