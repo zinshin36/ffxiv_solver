@@ -11,52 +11,56 @@ STAT_NAMES = {
 }
 
 
-def normalize(text):
+def normalize(t):
+    return t.lower().replace(" ", "").replace("_", "")
 
-    return text.lower().replace(" ", "").replace("_", "")
 
+def safe_get(row, idx):
 
-def safe_get(row, index):
-
-    if index >= len(row):
+    if idx >= len(row):
         return ""
 
-    return row[index]
+    return row[idx]
 
 
-def discover_columns(header):
+def detect_column(header, keywords):
 
-    cols = {}
+    header_norm = [normalize(h) for h in header]
 
-    for i, h in enumerate(header):
+    for i, col in enumerate(header_norm):
 
-        n = normalize(h)
+        for k in keywords:
 
-        if n == "name":
-            cols["name"] = i
+            if k in col:
+                return i
 
-        elif "equipslotcategory" in n:
-            cols["slot"] = i
+    return None
 
-        elif "materiaslotcount" in n:
-            cols["materia"] = i
 
-        elif "level" in n and "item" in n:
-            cols["ilvl"] = i
+def build_itemlevel_table():
 
-        elif n == "level":
-            cols["ilvl"] = i
+    rows = load_csv("ItemLevel.csv")
 
-    required = ["name", "slot", "materia", "ilvl"]
+    header = rows[1]
 
-    missing = [x for x in required if x not in cols]
+    key_col = detect_column(header, ["key"])
 
-    if missing:
-        raise Exception(f"Missing required columns: {missing}")
+    ilvl_col = detect_column(header, ["itemlevel", "level"])
 
-    log(f"Detected columns: {cols}")
+    table = {}
 
-    return cols
+    for r in rows[3:]:
+
+        key = to_int(safe_get(r, key_col))
+
+        if key == 0:
+            continue
+
+        table[key] = to_int(safe_get(r, ilvl_col))
+
+    log(f"ItemLevel table built ({len(table)})")
+
+    return table
 
 
 def discover_stat_pairs(header):
@@ -79,27 +83,34 @@ def parse_stats(row, stat_pairs):
 
     for stat_col, val_col in stat_pairs:
 
-        stat_name = normalize(safe_get(row, stat_col))
+        stat = normalize(safe_get(row, stat_col))
 
-        if not stat_name:
+        if not stat:
             continue
 
-        for key in STAT_NAMES:
+        for k in STAT_NAMES:
 
-            if key in stat_name:
-
-                stats[STAT_NAMES[key]] = to_int(safe_get(row, val_col))
+            if k in stat:
+                stats[STAT_NAMES[k]] = to_int(safe_get(row, val_col))
 
     return stats
 
 
 def load_all_items():
 
+    itemlevel_table = build_itemlevel_table()
+
     rows = load_csv("Item.csv")
 
     header = rows[1]
 
-    cols = discover_columns(header)
+    name_col = detect_column(header, ["name", "singular"])
+    slot_col = detect_column(header, ["equipslot"])
+    materia_col = detect_column(header, ["materiaslotcount"])
+    level_key_col = detect_column(header, ["levelitem", "level{item}"])
+
+    if level_key_col is None:
+        level_key_col = detect_column(header, ["level"])
 
     stat_pairs = discover_stat_pairs(header)
 
@@ -108,16 +119,18 @@ def load_all_items():
 
     for r in rows[3:]:
 
-        name = safe_get(r, cols["name"])
+        name = safe_get(r, name_col)
 
         if not name:
             continue
 
-        ilvl = to_int(safe_get(r, cols["ilvl"]))
+        level_key = to_int(safe_get(r, level_key_col))
 
-        slot = safe_get(r, cols["slot"])
+        ilvl = itemlevel_table.get(level_key, 0)
 
-        materia_slots = to_int(safe_get(r, cols["materia"]))
+        slot = safe_get(r, slot_col)
+
+        materia_slots = to_int(safe_get(r, materia_col))
 
         stats = parse_stats(r, stat_pairs)
 
