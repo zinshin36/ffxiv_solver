@@ -1,4 +1,4 @@
-from engine.csv_loader import load_csv, to_int
+from engine.csv_loader import load_csv, find_col, to_int
 from engine.logger import log
 
 
@@ -9,34 +9,6 @@ STAT_MAP = {
     "Spell Speed": "sps",
     "Intelligence": "int"
 }
-
-
-def build_itemlevel_table():
-
-    rows = load_csv("ItemLevel.csv")
-
-    header = rows[1]
-
-    key_col = header.index("key")
-    ilvl_col = None
-
-    for i, c in enumerate(header):
-        if "ItemLevel" in c or "Level" in c:
-            ilvl_col = i
-            break
-
-    table = {}
-
-    for r in rows[3:]:
-
-        key = to_int(r[key_col])
-
-        if key == 0:
-            continue
-
-        table[key] = to_int(r[ilvl_col])
-
-    return table
 
 
 def find_stat_pairs(header):
@@ -60,27 +32,26 @@ def parse_stats(row, pairs):
         if stat_col >= len(row):
             continue
 
-        stat_name = row[stat_col]
+        stat = row[stat_col]
 
-        if stat_name not in STAT_MAP:
+        if stat not in STAT_MAP:
             continue
 
-        stats[STAT_MAP[stat_name]] = to_int(row[val_col])
+        stats[STAT_MAP[stat]] = to_int(row[val_col])
 
     return stats
 
 
 def load_all_items():
 
-    ilvl_table = build_itemlevel_table()
-
     rows = load_csv("Item.csv")
+
     header = rows[1]
 
-    name_col = header.index("Name")
-    ilvl_key_col = header.index("LevelItem")
-    slot_col = header.index("EquipSlotCategory")
-    materia_col = header.index("MateriaSlotCount")
+    name_col = find_col(header, "Name")
+    ilvl_col = find_col(header, "LevelItem")
+    slot_col = find_col(header, "EquipSlotCategory")
+    materia_col = find_col(header, "MateriaSlotCount")
 
     stat_pairs = find_stat_pairs(header)
 
@@ -89,17 +60,15 @@ def load_all_items():
 
     for r in rows[3:]:
 
+        if len(r) <= name_col:
+            continue
+
         name = r[name_col]
 
         if not name:
             continue
 
-        level_key = to_int(r[ilvl_key_col])
-
-        if level_key not in ilvl_table:
-            continue
-
-        ilvl = ilvl_table[level_key]
+        ilvl = to_int(r[ilvl_col])
 
         stats = parse_stats(r, stat_pairs)
 
