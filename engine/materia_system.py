@@ -1,30 +1,41 @@
 from engine.csv_loader import load_csv, to_int
 
 
+def normalize(t):
+    return t.lower().replace(" ", "").replace("_", "")
+
+
+def detect_column(header, keywords):
+
+    header_norm = [normalize(h) for h in header]
+
+    for i, col in enumerate(header_norm):
+
+        for k in keywords:
+
+            if k in col:
+                return i
+
+    return None
+
+
 def load_materia():
 
     rows = load_csv("Materia.csv")
 
     header = rows[1]
 
-    name_col = header.index("Name")
+    name_col = detect_column(header, ["name", "singular"])
 
-    stat_col = None
-    val_col = None
+    stat_col = detect_column(header, ["baseparam"])
 
-    for i, h in enumerate(header):
-
-        if "BaseParam" in h:
-            stat_col = i
-
-        if "Value" in h:
-            val_col = i
+    val_col = detect_column(header, ["value"])
 
     materia = []
 
     for r in rows[3:]:
 
-        name = r[name_col]
+        name = r[name_col] if name_col < len(r) else ""
 
         if not name:
             continue
@@ -36,31 +47,3 @@ def load_materia():
         })
 
     return materia
-
-
-def optimize_materia(item, materia):
-
-    stats = dict(item["stats"])
-
-    melds = []
-
-    for _ in range(item["materia_slots"]):
-
-        best = None
-        best_gain = 0
-
-        for m in materia:
-
-            val = m["value"]
-
-            if val > best_gain:
-                best = m
-                best_gain = val
-
-        if best:
-
-            stats[best["stat"]] = stats.get(best["stat"], 0) + best["value"]
-
-            melds.append(best)
-
-    return stats, melds
