@@ -1,15 +1,16 @@
 import tkinter as tk
 from tkinter import messagebox
 
-from engine.data_parser import load_items
+from engine.data_parser import load_all_items, filter_items
 from engine.materia_system import load_materia
 from engine.optimizer import solve
 from engine.food_system import FOODS
 from engine.logger import log
 
 
-items = []
+all_items = []
 materia = []
+max_ilvl = 0
 
 
 class App:
@@ -22,58 +23,67 @@ class App:
         frame = tk.Frame(root, padx=10, pady=10)
         frame.pack()
 
-        tk.Label(frame, text="Target GCD").grid(row=0, column=0)
+        tk.Label(frame, text="Highest Detected iLvl").grid(row=0, column=0)
 
-        self.gcd = tk.Entry(frame)
-        self.gcd.insert(0, "2.38")
-        self.gcd.grid(row=0, column=1)
+        self.max_ilvl_label = tk.Label(frame, text="Unknown")
+        self.max_ilvl_label.grid(row=0, column=1)
 
         tk.Label(frame, text="Minimum iLvl").grid(row=1, column=0)
 
-        self.ilvl = tk.Entry(frame)
-        self.ilvl.insert(0, "650")
-        self.ilvl.grid(row=1, column=1)
+        self.ilvl_entry = tk.Entry(frame)
+        self.ilvl_entry.insert(0, "0")
+        self.ilvl_entry.grid(row=1, column=1)
 
-        tk.Label(frame, text="Food").grid(row=2, column=0)
+        tk.Label(frame, text="Target GCD").grid(row=2, column=0)
 
-        self.food = tk.StringVar()
-        self.food.set("None")
+        self.gcd_entry = tk.Entry(frame)
+        self.gcd_entry.insert(0, "2.38")
+        self.gcd_entry.grid(row=2, column=1)
 
-        tk.OptionMenu(frame, self.food, *FOODS.keys()).grid(row=2, column=1)
+        tk.Label(frame, text="Food").grid(row=3, column=0)
+
+        self.food_var = tk.StringVar()
+        self.food_var.set("None")
+
+        tk.OptionMenu(frame, self.food_var, *FOODS.keys()).grid(row=3, column=1)
 
         tk.Button(
             frame,
             text="Load Game Data",
             command=self.load_data,
             width=25
-        ).grid(row=3, column=0, columnspan=2, pady=5)
+        ).grid(row=4, column=0, columnspan=2, pady=5)
 
         tk.Button(
             frame,
             text="Run Solver",
             command=self.run_solver,
             width=25
-        ).grid(row=4, column=0, columnspan=2, pady=5)
+        ).grid(row=5, column=0, columnspan=2, pady=5)
 
-        self.output = tk.Text(root, width=90, height=25)
+        self.output = tk.Text(root, width=95, height=28)
         self.output.pack(pady=10)
 
         log("Application started")
 
     def load_data(self):
 
-        global items, materia
+        global all_items, materia, max_ilvl
 
         try:
 
-            ilvl = int(self.ilvl.get())
+            all_items, max_ilvl = load_all_items()
 
-            items = load_items(ilvl)
             materia = load_materia()
 
+            self.max_ilvl_label.config(text=str(max_ilvl))
+
+            self.ilvl_entry.delete(0, tk.END)
+            self.ilvl_entry.insert(0, str(max_ilvl - 20))
+
             messagebox.showinfo(
-                "Loaded",
-                f"{len(items)} items loaded\n{len(materia)} materia loaded"
+                "Data Loaded",
+                f"{len(all_items)} items loaded\nMax iLvl: {max_ilvl}"
             )
 
         except Exception as e:
@@ -82,17 +92,28 @@ class App:
 
     def run_solver(self):
 
-        if not items:
-            messagebox.showerror("Error", "Load data first")
+        global all_items, materia
+
+        if not all_items:
+
+            messagebox.showerror("Error", "Load game data first")
             return
 
         try:
 
-            gcd = float(self.gcd.get())
+            min_ilvl = int(self.ilvl_entry.get())
+            gcd = float(self.gcd_entry.get())
 
         except:
 
-            messagebox.showerror("Error", "Invalid GCD value")
+            messagebox.showerror("Error", "Invalid numeric input")
+            return
+
+        items = filter_items(all_items, min_ilvl)
+
+        if not items:
+
+            messagebox.showerror("Error", "No items after filter")
             return
 
         result, dps = solve(items, materia, gcd)
@@ -107,20 +128,27 @@ class App:
 
         for name, melds in build:
 
-            meld_names = [m["name"] for m in melds]
+            meld_names = []
+
+            for m in melds:
+
+                if isinstance(m, dict):
+                    meld_names.append(m.get("name", "Unknown Materia"))
+                else:
+                    meld_names.append(str(m))
+
+            meld_text = ", ".join(meld_names) if meld_names else "No Melds"
 
             self.output.insert(
                 tk.END,
-                f"{name} | {', '.join(meld_names)}\n"
+                f"{name}\n   Materia: {meld_text}\n\n"
             )
 
-        self.output.insert(tk.END, "\nStats\n\n")
+        self.output.insert(tk.END, "Final Stats\n\n")
 
         for k, v in stats.items():
 
             self.output.insert(tk.END, f"{k}: {v}\n")
-
-        self.output.insert(tk.END, f"\nFood: {food}\n")
 
 
 def main():
