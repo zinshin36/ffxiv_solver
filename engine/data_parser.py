@@ -3,107 +3,111 @@ from engine.logger import log
 
 
 STAT_MAP = {
-    "Critical Hit": "CriticalHit",
-    "Determination": "Determination",
-    "Direct Hit Rate": "DirectHitRate",
-    "Spell Speed": "SpellSpeed",
-    "Intelligence": "Intelligence"
+    "Critical Hit": "crit",
+    "Determination": "det",
+    "Direct Hit Rate": "dh",
+    "Spell Speed": "sps",
+    "Intelligence": "int"
 }
 
 
-def find_column(header, text):
+def build_itemlevel_table():
 
-    text = text.lower()
+    rows = load_csv("ItemLevel.csv")
 
-    for i, col in enumerate(header):
+    header = rows[1]
 
-        if text in col.lower():
-            return i
+    key_col = header.index("key")
+    ilvl_col = None
 
-    raise Exception(f"Column containing '{text}' not found")
+    for i, c in enumerate(header):
+        if "ItemLevel" in c or "Level" in c:
+            ilvl_col = i
+            break
+
+    table = {}
+
+    for r in rows[3:]:
+
+        key = to_int(r[key_col])
+
+        if key == 0:
+            continue
+
+        table[key] = to_int(r[ilvl_col])
+
+    return table
 
 
-def find_baseparam_pairs(header):
+def find_stat_pairs(header):
 
     pairs = []
 
     for i, col in enumerate(header):
 
         if col.startswith("BaseParam["):
-
             pairs.append((i, i + 1))
 
     return pairs
 
 
-def parse_stats(row, stat_pairs):
+def parse_stats(row, pairs):
 
     stats = {}
 
-    for stat_col, value_col in stat_pairs:
+    for stat_col, val_col in pairs:
 
-        if stat_col >= len(row) or value_col >= len(row):
+        if stat_col >= len(row):
             continue
 
         stat_name = row[stat_col]
 
-        if not stat_name:
+        if stat_name not in STAT_MAP:
             continue
 
-        mapped = STAT_MAP.get(stat_name)
-
-        if not mapped:
-            continue
-
-        stats[mapped] = to_int(row[value_col])
+        stats[STAT_MAP[stat_name]] = to_int(row[val_col])
 
     return stats
 
 
 def load_all_items():
 
-    rows = load_csv("Item.csv")
+    ilvl_table = build_itemlevel_table()
 
+    rows = load_csv("Item.csv")
     header = rows[1]
 
-    name_col = find_column(header, "Name")
-    ilvl_col = find_column(header, "Level")
-    job_col = find_column(header, "ClassJobCategory")
-    slot_col = find_column(header, "EquipSlotCategory")
-    materia_col = find_column(header, "MateriaSlotCount")
+    name_col = header.index("Name")
+    ilvl_key_col = header.index("LevelItem")
+    slot_col = header.index("EquipSlotCategory")
+    materia_col = header.index("MateriaSlotCount")
 
-    stat_pairs = find_baseparam_pairs(header)
-
-    log(f"Stat pairs detected: {len(stat_pairs)}")
+    stat_pairs = find_stat_pairs(header)
 
     items = []
-
     max_ilvl = 0
 
     for r in rows[3:]:
 
-        if len(r) <= ilvl_col:
-            continue
-
         name = r[name_col]
-        ilvl = to_int(r[ilvl_col])
-        jobs = r[job_col]
-        slot = r[slot_col]
-        materia_slots = to_int(r[materia_col])
 
         if not name:
             continue
 
-        if jobs and "BLM" not in jobs and "THM" not in jobs:
+        level_key = to_int(r[ilvl_key_col])
+
+        if level_key not in ilvl_table:
             continue
+
+        ilvl = ilvl_table[level_key]
 
         stats = parse_stats(r, stat_pairs)
 
         item = {
             "name": name,
-            "slot": slot,
+            "slot": r[slot_col],
             "ilvl": ilvl,
-            "materia_slots": materia_slots,
+            "materia_slots": to_int(r[materia_col]),
             "stats": stats
         }
 
