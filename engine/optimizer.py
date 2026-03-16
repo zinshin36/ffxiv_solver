@@ -1,7 +1,9 @@
 from itertools import product
 
+from engine.dominance import prune
 from engine.dps_model import compute_dps
-from engine.materia_system import best_materia
+from engine.materia_system import optimize_materia
+from engine.spell_speed import matches_target
 from engine.food_system import apply_food
 
 
@@ -11,32 +13,23 @@ def group_slots(items):
 
     for i in items:
 
-        slot = i["slot"]
+        s = i["slot"]
 
-        if slot not in slots:
-            slots[slot] = []
+        if s not in slots:
+            slots[s] = []
 
-        slots[slot].append(i)
+        slots[s].append(i)
+
+    for k in slots:
+
+        slots[k] = prune(slots[k])
 
     return slots
 
 
-def combine_stats(items):
-
-    stats = {}
-
-    for g in items:
-
-        for k, v in g["stats"].items():
-
-            stats[k] = stats.get(k, 0) + v
-
-    return stats
-
-
 def ring_rule(combo):
 
-    rings = [i for i in combo if "Ring" in i["name"]]
+    rings = [x for x in combo if "Ring" in x["name"]]
 
     if len(rings) < 2:
         return True
@@ -44,7 +37,20 @@ def ring_rule(combo):
     return rings[0]["name"] != rings[1]["name"]
 
 
-def solve(items, materia, food):
+def combine_stats(stats_list):
+
+    result = {}
+
+    for s in stats_list:
+
+        for k, v in s.items():
+
+            result[k] = result.get(k, 0) + v
+
+    return result
+
+
+def solve(items, materia, target_gcd, food):
 
     slots = group_slots(items)
 
@@ -52,34 +58,39 @@ def solve(items, materia, food):
 
     best = []
 
+    tested = 0
+
     for combo in product(*slot_lists):
 
         if not ring_rule(combo):
             continue
 
-        melded_items = []
-        melds = []
+        tested += 1
+
+        melded = []
+        meld_names = []
 
         for g in combo:
 
-            s, m = best_materia(g, materia)
+            s, m = optimize_materia(g, materia)
 
-            melded_items.append(s)
-            melds.append((g["name"], m))
+            melded.append(s)
+            meld_names.append((g["name"], m))
 
-        stats = {}
-
-        for s in melded_items:
-
-            for k, v in s.items():
-                stats[k] = stats.get(k, 0) + v
+        stats = combine_stats(melded)
 
         stats = apply_food(stats, food)
 
+        if not matches_target(stats.get("sps", 0), target_gcd):
+            continue
+
         dps = compute_dps(stats)
 
-        best.append((dps, melds, stats))
+        best.append((dps, meld_names, stats))
 
         best = sorted(best, reverse=True)[:5]
+
+        if tested % 100000 == 0:
+            print("tested builds:", tested)
 
     return best
