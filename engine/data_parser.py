@@ -1,108 +1,120 @@
-from engine.csv_loader import load_csv, to_int
+import csv
 from engine.logger import log
 
 
-NAME_COL = 1
-ILVL_COL = 12
-SLOT_COL = 18
-MATERIA_COL = 87
+def safe_int(val):
+    try:
+        return int(val)
+    except:
+        return 0
 
 
-def safe_get(row, idx):
-    if idx >= len(row):
-        return ""
-    return row[idx]
+def is_blm_weapon(name):
+    if not name:
+        return False
+
+    n = name.lower()
+
+    return any(x in n for x in [
+        "rod", "staff", "scepter", "longpole"
+    ])
 
 
-def discover_stat_pairs(header):
+def is_casting_gear(row, headers):
+    """
+    Detect casting gear using ClassJobCategory column
+    """
 
-    pairs = []
+    for key in headers:
+        if "classjobcategory" in key.lower():
+            val = row.get(key, "").lower()
+            if "thaumaturge" in val or "black mage" in val or "caster" in val:
+                return True
 
-    for i, col in enumerate(header):
-        if "BaseParam" in col:
-            pairs.append((i, i + 1))
-
-    log(f"Stat pairs detected: {len(pairs)}")
-
-    return pairs
-
-
-def parse_stats(row, stat_pairs):
-
-    stats = {}
-
-    for stat_col, val_col in stat_pairs:
-
-        stat_name = safe_get(row, stat_col)
-        val = to_int(safe_get(row, val_col))
-
-        if val <= 0:
-            continue
-
-        stats[stat_name] = val
-
-    return stats
+    return False
 
 
-def load_all_items():
+def find_column(headers, keywords):
+    for h in headers:
+        hl = h.lower()
+        if any(k in hl for k in keywords):
+            return h
+    return None
 
-    rows = load_csv("Item.csv")
 
-    header = rows[1]
-
-    log(f"Item headers detected ({len(header)} columns)")
-
-    stat_pairs = discover_stat_pairs(header)
+def parse_items(path):
 
     items = []
-    max_ilvl = 0
 
-    sample = []
+    with open(path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        headers = reader.fieldnames
 
-    for r in rows[3:]:
+        log(f"Item headers detected ({len(headers)} columns)")
 
-        name = safe_get(r, NAME_COL)
+        # --- detect columns dynamically ---
+        name_col = find_column(headers, ["name"])
+        ilvl_col = find_column(headers, ["levelitem", "itemlevel"])
+        slot_col = find_column(headers, ["equipslotcategory"])
+        dmg_col = find_column(headers, ["damagephys", "damage"])
 
-        if not name:
-            continue
+        log(f"Using columns -> name:{name_col} ilvl:{ilvl_col} slot:{slot_col}")
 
-        ilvl = to_int(safe_get(r, ILVL_COL))
-        slot = safe_get(r, SLOT_COL)
-        materia_slots = to_int(safe_get(r, MATERIA_COL))
+        for row in reader:
 
-        stats = parse_stats(r, stat_pairs)
+            name = row.get(name_col)
+            ilvl = safe_int(row.get(ilvl_col))
 
-        if len(sample) < 10:
-            sample.append(ilvl)
+            # sanity check (fix insane ilvl bug)
+            if ilvl <= 0 or ilvl > 1000:
+                continue
 
-        item = {
-            "name": name,
-            "slot": slot,
-            "materia_slots": materia_slots,
-            "ilvl": ilvl,
-            "stats": stats
-        }
+            slot = row.get(slot_col)
 
-        items.append(item)
+            # --- FILTER: only casting gear ---
+            if not is_casting_gear(row, headers):
+                continue
 
-        if ilvl > max_ilvl:
-            max_ilvl = ilvl
+            # --- FILTER: weapons ---
+            if slot == "1":  # weapon slot
+                if not is_blm_weapon(name):
+                    continue
 
-    log(f"Sample detected ilvls: {sample}")
+            item = {
+                "name": name,
+                "ilvl": ilvl,
+                "slot": slot,
+                "crit": 0,
+                "dh": 0,
+                "det": 0,
+                "sps": 0,
+                "materia_slots": 2
+            }
+
+            # --- stat parsing (robust) ---
+            for h in headers:
+                hl = h.lower()
+
+                val = safe_int(row.get(h))
+
+                if "criticalhit" in hl:
+                    item["crit"] += val
+                elif "directhit" in hl:
+                    item["dh"] += val
+                elif "determination" in hl:
+                    item["det"] += val
+                elif "spellspeed" in hl:
+                    item["sps"] += val
+
+            items.append(item)
+
     log(f"Items parsed ({len(items)})")
+
+    if items:
+        max_ilvl = max(i["ilvl"] for i in items)
+    else:
+        max_ilvl = 0
+
     log(f"Highest item level detected: {max_ilvl}")
 
-    return items, max_ilvl
-
-
-def filter_items(items, min_ilvl):
-
-    filtered = []
-
-    for i in items:
-        if i["ilvl"] >= min_ilvl:
-            filtered.append(i)
-
-    log(f"Items after ilvl filter ({len(filtered)})")
-
-    return filtered
+    return items
