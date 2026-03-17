@@ -1,7 +1,8 @@
 from engine.logger import log
 from engine.dps import calculate_score
+from engine.materia import apply_materia
 
-# keep more items per slot for full search
+# keep this reasonable so we don't hit billions
 MAX_PER_SLOT = 6
 
 VALID_SLOTS = [
@@ -32,7 +33,7 @@ def normalize_slot(slot):
             10: "necklace",
             11: "bracelet",
             12: "ring",
-            13: "head",  # shared armor category in your data
+            13: "head",  # shared armor category (your data quirk)
         }
 
         return SLOT_MAP.get(slot_id)
@@ -83,8 +84,8 @@ def group_slots(items):
 
 def trim_slots(slots):
     """
-    Keep top N per slot but DO NOT prune aggressively
-    Just sort by raw stat sum so we don't explode to billions
+    Keep top N per slot by raw stat sum
+    (NOT pruning logic — just prevents explosion)
     """
 
     for slot in slots:
@@ -145,13 +146,11 @@ def solve(items, gcd_target, progress=None):
 
             score = calculate_score(stats, gcd_target)
 
-            # ALWAYS allow updates (no filtering)
             if score > best_score:
                 best_score = score
                 best_build = build.copy()
                 log(f"New best {round(score, 2)}")
 
-            # progress logging (VISIBLE + steady)
             if checked % 1000 == 0:
                 percent = int((checked / total) * 100)
                 log(f"Progress {checked}/{total} ({percent}%)")
@@ -161,7 +160,11 @@ def solve(items, gcd_target, progress=None):
 
             return
 
-        for item in slot_items[i]:
+        for base_item in slot_items[i]:
+
+            # 🔥 IMPORTANT: copy item before applying materia
+            item = base_item.copy()
+            item = apply_materia(item)
 
             new_stats = stats.copy()
 
