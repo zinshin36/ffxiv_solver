@@ -1,22 +1,34 @@
 import datetime
+import os
 
 _log_widget = None
+_log_file = None
 
 
 def init_logger(widget=None):
-    """
-    Optional: attach a Tkinter text widget to display logs
-    """
-    global _log_widget
+
+    global _log_widget, _log_file
+
     _log_widget = widget
+
+    os.makedirs("logs", exist_ok=True)
+
+    filename = datetime.datetime.now().strftime("logs/log_%Y%m%d_%H%M%S.txt")
+
+    _log_file = open(filename, "w", encoding="utf-8")
 
 
 def log(message):
 
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+
     line = f"[{timestamp}] {message}"
 
     print(line)
+
+    if _log_file:
+        _log_file.write(line + "\n")
+        _log_file.flush()
 
     if _log_widget:
         try:
