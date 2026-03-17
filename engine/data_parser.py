@@ -20,28 +20,16 @@ def is_blm_weapon(name):
     ])
 
 
-def is_casting_gear(row, headers):
-    """
-    Detect casting gear using ClassJobCategory
-    """
-
-    for key in headers:
-        if "classjobcategory" in key.lower():
-            val = str(row.get(key, "")).lower()
-            if any(x in val for x in [
-                "thaumaturge", "black mage", "caster"
-            ]):
-                return True
-
-    return False
-
-
 def find_column(headers, keywords):
     for h in headers:
         hl = h.lower()
         if any(k in hl for k in keywords):
             return h
     return None
+
+
+def find_all_columns(headers, keyword):
+    return [h for h in headers if keyword in h.lower()]
 
 
 def parse_items(path):
@@ -54,29 +42,43 @@ def parse_items(path):
 
         log(f"Item headers detected ({len(headers)} columns)")
 
-        # --- detect columns dynamically ---
+        # --- detect columns ONCE ---
         name_col = find_column(headers, ["name"])
         ilvl_col = find_column(headers, ["levelitem", "itemlevel"])
         slot_col = find_column(headers, ["equipslotcategory"])
 
-        log(f"Using columns -> name:{name_col} ilvl:{ilvl_col} slot:{slot_col}")
+        classjob_cols = find_all_columns(headers, "classjobcategory")
 
-        for row in reader:
+        log(f"Using columns -> name:{name_col} ilvl:{ilvl_col} slot:{slot_col}")
+        log(f"ClassJobCategory columns: {len(classjob_cols)}")
+
+        for i, row in enumerate(reader):
+
+            # optional progress so you SEE it's working
+            if i % 5000 == 0 and i > 0:
+                log(f"Parsing items... {i}")
 
             name = row.get(name_col)
             ilvl = safe_int(row.get(ilvl_col))
 
-            # sanity filter (fix broken ilvl issue)
+            # sanity filter
             if ilvl <= 0 or ilvl > 1000:
                 continue
 
             slot = row.get(slot_col)
 
-            # --- ONLY casting gear ---
-            if not is_casting_gear(row, headers):
+            # --- FAST casting check ---
+            is_casting = False
+            for col in classjob_cols:
+                val = str(row.get(col, "")).lower()
+                if "black mage" in val or "thaumaturge" in val or "caster" in val:
+                    is_casting = True
+                    break
+
+            if not is_casting:
                 continue
 
-            # --- ONLY BLM weapons ---
+            # --- weapon filter ---
             if str(slot) == "1":
                 if not is_blm_weapon(name):
                     continue
@@ -116,6 +118,5 @@ def parse_items(path):
     return items
 
 
-# ✅ THIS FIXES YOUR ERROR
 def load_all_items(path):
     return parse_items(path)
