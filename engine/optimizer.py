@@ -1,7 +1,7 @@
 from engine.logger import log
 from engine.dps import calculate_score
 
-MAX_PER_SLOT = 5
+MAX_PER_SLOT = 4  # ⬅️ reduced from 5 (huge speed gain)
 
 VALID_SLOTS = [
     "weapon", "head", "body", "hands",
@@ -11,16 +11,10 @@ VALID_SLOTS = [
 
 
 def normalize_slot(slot):
-    """
-    Handles BOTH:
-    - Numeric slot IDs (from EquipSlotCategory)
-    - String slot names (fallback)
-    """
 
     if slot is None:
         return None
 
-    # --- CASE 1: numeric slot ID ---
     try:
         slot_id = int(slot)
 
@@ -37,6 +31,7 @@ def normalize_slot(slot):
             10: "necklace",
             11: "bracelet",
             12: "ring",
+            13: "head",  
         }
 
         return SLOT_MAP.get(slot_id)
@@ -44,14 +39,13 @@ def normalize_slot(slot):
     except:
         pass
 
-    # --- CASE 2: string fallback ---
     s = str(slot).lower()
 
-    if "mainhand" in s or "weapon" in s:
+    if "weapon" in s:
         return "weapon"
     if "head" in s:
         return "head"
-    if "body" in s or "chest" in s:
+    if "body" in s:
         return "body"
     if "hand" in s:
         return "hands"
@@ -63,9 +57,9 @@ def normalize_slot(slot):
         return "earrings"
     if "neck" in s:
         return "necklace"
-    if "brace" in s or "wrist" in s:
+    if "brace" in s:
         return "bracelet"
-    if "ring" in s or "finger" in s:
+    if "ring" in s:
         return "ring"
 
     return None
@@ -75,20 +69,11 @@ def group_slots(items):
 
     slots = {k: [] for k in VALID_SLOTS}
 
-    # DEBUG: show raw slot values (first 20)
-    for item in items[:20]:
-        log(f"SLOT RAW: {item.get('slot')}")
-
     for item in items:
-
         slot = normalize_slot(item.get("slot"))
+        if slot:
+            slots[slot].append(item)
 
-        if not slot:
-            continue
-
-        slots[slot].append(item)
-
-    # DEBUG: show counts
     for s in VALID_SLOTS:
         log(f"{s}: {len(slots[s])} items")
 
@@ -100,10 +85,12 @@ def trim_slots(slots):
     for slot in slots:
 
         slots[slot].sort(
-            key=lambda x: x.get("crit", 0)
-                        + x.get("dh", 0)
-                        + x.get("det", 0)
-                        + x.get("sps", 0),
+            key=lambda x: (
+                x.get("crit", 0) * 1.0 +
+                x.get("dh", 0) * 0.9 +
+                x.get("det", 0) * 0.8 +
+                x.get("sps", 0) * 0.7
+            ),
             reverse=True
         )
 
@@ -115,7 +102,6 @@ def solve(items, gcd_target, progress=None):
     log("Starting solver")
 
     slots = group_slots(items)
-
     trim_slots(slots)
 
     slot_order = [
@@ -127,32 +113,33 @@ def solve(items, gcd_target, progress=None):
     slot_items = []
 
     for s in slot_order:
-
         if not slots[s]:
             log(f"Missing slot: {s}")
             return None, 0
-
         slot_items.append(slots[s])
 
+    # 🔥 MUCH smaller now
     total = 1
     for s in slot_items:
         total *= len(s)
 
-    log(f"Total combinations: {total}")
+    log(f"Reduced combinations: {total}")
 
     best_score = 0
     best_build = None
-
     checked = 0
 
     def dfs(i, stats, build):
 
         nonlocal best_score, best_build, checked
 
+        # 🔥 PRUNE: skip weak builds early
+        if stats.get("crit", 0) < best_score * 0.1:
+            return
+
         if i == len(slot_items):
 
             checked += 1
-
             score = calculate_score(stats, gcd_target)
 
             if score > best_score:
@@ -161,9 +148,9 @@ def solve(items, gcd_target, progress=None):
                 log(f"New best {round(score, 2)}")
 
             if checked % 1000 == 0:
-                log(f"Progress {checked}/{total}")
+                log(f"Checked {checked}")
                 if progress:
-                    progress(int((checked / total) * 100))
+                    progress(min(100, int(checked / total * 100)))
 
             return
 
@@ -175,9 +162,7 @@ def solve(items, gcd_target, progress=None):
                 new_stats[s] = new_stats.get(s, 0) + item.get(s, 0)
 
             build.append(item)
-
             dfs(i + 1, new_stats, build)
-
             build.pop()
 
     dfs(0, {}, [])
