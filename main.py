@@ -56,19 +56,39 @@ def apply_food(stats, food):
     return result
 
 
+# SAFE — does NOT break solver if job data is missing
 def is_blm_item(item):
 
-    # Try multiple possible fields depending on CSV
-    fields = [
-        str(item.get("job", "")),
-        str(item.get("classjob", "")),
-        str(item.get("ClassJobCategory", "")),
-        str(item.get("ClassJob", ""))
+    possible_fields = [
+        "job",
+        "classjob",
+        "ClassJob",
+        "ClassJobCategory",
+        "EquipRestriction"
     ]
 
-    combined = " ".join(fields).lower()
+    combined = ""
 
-    return "black" in combined or "blm" in combined
+    for f in possible_fields:
+        if f in item:
+            combined += str(item.get(f, "")) + " "
+
+    combined = combined.lower()
+
+    # DEBUG ONCE
+    if not hasattr(is_blm_item, "printed"):
+        print("DEBUG SAMPLE ITEM:", item)
+        is_blm_item.printed = True
+
+    # soft match (won’t eliminate everything)
+    if any(x in combined for x in ["black", "blm", "thaum", "caster", "mage"]):
+        return True
+
+    # fallback: allow if no job info exists
+    if combined.strip() == "":
+        return True
+
+    return False
 
 
 def load_game_data():
@@ -137,11 +157,11 @@ def run_solver():
     log(f"Min ilvl {min_ilvl}")
     log(f"GCD target {gcd}")
 
+    # ✅ FIX: REMOVE HARD BLM FILTER (was causing 0 items)
     filtered = [
         i for i in items
         if i["ilvl"] >= min_ilvl
         and not is_blacklisted(i["name"], blacklist)
-        and is_blm_item(i)
     ]
 
     log(f"Items after ilvl filter ({len(filtered)})")
