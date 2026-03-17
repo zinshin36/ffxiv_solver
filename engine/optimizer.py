@@ -1,93 +1,61 @@
 from engine.logger import log
-import itertools
 
 
-def score_build(build):
+def solve(items, progress_callback=None):
 
-    stats = {}
+    log("Solve() called")
 
-    for item in build:
-
-        for k, v in item["stats"].items():
-            stats[k] = stats.get(k, 0) + v
-
-    crit = stats.get("CriticalHit", 0)
-    dh = stats.get("DirectHitRate", 0)
-    det = stats.get("Determination", 0)
-    sps = stats.get("SpellSpeed", 0)
-
-    # simple temporary DPS formula
-    dps = crit * 1.2 + dh * 1.1 + det * 1.0 + sps * 0.8
-
-    return dps, stats
-
-
-def group_by_slot(items):
-
+    # group by slot
     slots = {}
 
-    for i in items:
+    for item in items:
 
-        slot = i["slot"]
+        slot = item["slot"]
 
         if slot not in slots:
             slots[slot] = []
 
-        slots[slot].append(i)
+        slots[slot].append(item)
 
-    return slots
+    slot_list = list(slots.values())
 
+    best = []
+    checked = 0
 
-def optimize(items):
+    def dfs(slot_index, build):
+
+        nonlocal checked
+
+        if slot_index >= len(slot_list):
+
+            checked += 1
+
+            if checked % 5000 == 0:
+                log(f"Checked {checked} builds")
+
+                if progress_callback:
+                    progress_callback(checked)
+
+            best.append({
+                "rank": len(best) + 1,
+                "items": [i["name"] for i in build],
+                "dps": sum(i["ilvl"] for i in build)
+            })
+
+            if len(best) > 20:
+                best.sort(key=lambda x: x["dps"], reverse=True)
+                best[:] = best[:10]
+
+            return
+
+        for item in slot_list[slot_index]:
+
+            dfs(slot_index + 1, build + [item])
 
     log("Starting solver")
 
-    slots = group_by_slot(items)
+    dfs(0, [])
 
-    slot_items = list(slots.values())
+    log("Solver finished")
 
-    best_builds = []
-
-    checked = 0
-
-    for combo in itertools.product(*slot_items):
-
-        checked += 1
-
-        dps, stats = score_build(combo)
-
-        best_builds.append((dps, combo))
-
-        best_builds = sorted(best_builds, key=lambda x: x[0], reverse=True)[:5]
-
-        if checked % 5000 == 0:
-            log(f"Checked {checked} builds")
-
-    log(f"Total builds checked: {checked}")
-
-    return best_builds
-
-
-# --------------------------------------------------
-# This function is what main.py expects to exist
-# --------------------------------------------------
-
-def solve(items, config=None):
-
-    log("Solve() called")
-
-    results = optimize(items)
-
-    builds = []
-
-    for rank, (dps, combo) in enumerate(results, start=1):
-
-        build = {
-            "rank": rank,
-            "dps": dps,
-            "items": [i["name"] for i in combo]
-        }
-
-        builds.append(build)
-
-    return builds
+    return best
