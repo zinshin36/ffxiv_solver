@@ -1,16 +1,46 @@
 from engine.logger import log
 from engine.dps import calculate_score
 
+MAX_PER_SLOT = 5
 
-TOP_PER_SLOT = 6
+
+VALID_SLOTS = [
+    "weapon", "head", "body", "hands",
+    "legs", "feet", "earrings",
+    "necklace", "bracelet", "ring"
+]
 
 
-def group_by_slot(items):
+def normalize_slot(slot):
 
-    slots = {}
+    s = slot.lower()
 
-    for i in items:
-        slots.setdefault(i["slot"], []).append(i)
+    if "weapon" in s: return "weapon"
+    if "head" in s: return "head"
+    if "body" in s: return "body"
+    if "hand" in s: return "hands"
+    if "leg" in s: return "legs"
+    if "feet" in s: return "feet"
+    if "ear" in s: return "earrings"
+    if "neck" in s: return "necklace"
+    if "brace" in s: return "bracelet"
+    if "ring" in s: return "ring"
+
+    return None
+
+
+def group_slots(items):
+
+    slots = {k: [] for k in VALID_SLOTS}
+
+    for item in items:
+
+        slot = normalize_slot(item["slot"])
+
+        if not slot:
+            continue
+
+        slots[slot].append(item)
 
     return slots
 
@@ -24,18 +54,38 @@ def trim_slots(slots):
             reverse=True
         )
 
-        slots[slot] = slots[slot][:TOP_PER_SLOT]
+        slots[slot] = slots[slot][:MAX_PER_SLOT]
 
 
 def solve(items, gcd_target, progress=None):
 
     log("Starting solver")
 
-    slots = group_by_slot(items)
+    slots = group_slots(items)
 
     trim_slots(slots)
 
-    slot_list = list(slots.values())
+    # Build slot order (rings twice)
+    slot_order = [
+        "weapon","head","body","hands","legs","feet",
+        "earrings","necklace","bracelet","ring","ring"
+    ]
+
+    slot_items = []
+
+    for s in slot_order:
+
+        if not slots[s]:
+            log(f"Missing slot: {s}")
+            return None, 0
+
+        slot_items.append(slots[s])
+
+    total = 1
+    for s in slot_items:
+        total *= len(s)
+
+    log(f"Total combinations: {total}")
 
     best_score = 0
     best_build = None
@@ -47,31 +97,31 @@ def solve(items, gcd_target, progress=None):
 
         nonlocal best_score, best_build, checked
 
-        if i >= len(slot_list):
+        if i == len(slot_items):
 
             checked += 1
 
             score = calculate_score(stats, gcd_target)
 
             if score > best_score:
-
                 best_score = score
                 best_build = build.copy()
+                log(f"New best {round(score,2)}")
 
-                log(f"New best score {round(score,2)}")
-
-            if checked % 2000 == 0 and progress:
-                progress(checked)
+            if checked % 1000 == 0:
+                log(f"Progress {checked}/{total}")
+                if progress:
+                    progress(int((checked/total)*100))
 
             return
 
 
-        for item in slot_list[i]:
+        for item in slot_items[i]:
 
             new_stats = stats.copy()
 
             for s in ["crit","dh","det","sps"]:
-                new_stats[s] = new_stats.get(s,0) + item.get(s,0)
+                new_stats[s] = new_stats.get(s,0)+item.get(s,0)
 
             build.append(item)
 
@@ -80,8 +130,8 @@ def solve(items, gcd_target, progress=None):
             build.pop()
 
 
-    dfs(0,{},[])
+    dfs(0, {}, [])
 
-    log(f"Solver checked {checked} builds")
+    log(f"Finished. Checked {checked}")
 
     return best_build, best_score
