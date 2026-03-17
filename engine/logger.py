@@ -6,7 +6,6 @@ _log_file = None
 
 
 def init_logger(widget=None):
-
     global _log_widget, _log_file
 
     _log_widget = widget
@@ -19,7 +18,6 @@ def init_logger(widget=None):
 
 
 def log(message):
-
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
 
     line = f"[{timestamp}] {message}"
@@ -34,5 +32,5 @@ def log(message):
         try:
             _log_widget.insert("end", line + "\n")
             _log_widget.see("end")
-        except:
+        except Exception:
             pass
