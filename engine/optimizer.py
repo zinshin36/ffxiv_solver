@@ -1,93 +1,87 @@
 from engine.logger import log
-from engine.gear_pruner import prune_slot
 from engine.dps import calculate_score
+
+
+TOP_PER_SLOT = 6
 
 
 def group_by_slot(items):
 
     slots = {}
 
-    for item in items:
-
-        slot = item["slot"]
-
-        if slot not in slots:
-            slots[slot] = []
-
-        slots[slot].append(item)
+    for i in items:
+        slots.setdefault(i["slot"], []).append(i)
 
     return slots
 
 
-def solve(items, target_gcd, progress_callback=None):
+def trim_slots(slots):
+
+    for slot in slots:
+
+        slots[slot].sort(
+            key=lambda x: x.get("crit",0)+x.get("dh",0)+x.get("det",0)+x.get("sps",0),
+            reverse=True
+        )
+
+        slots[slot] = slots[slot][:TOP_PER_SLOT]
+
+
+def solve(items, gcd_target, progress=None):
 
     log("Starting solver")
 
     slots = group_by_slot(items)
 
-    for slot in slots:
-        slots[slot] = prune_slot(slots[slot])
+    trim_slots(slots)
 
     slot_list = list(slots.values())
 
-    best = []
+    best_score = 0
+    best_build = None
+
     checked = 0
 
-    def dfs(slot_index, build, stats):
 
-        nonlocal checked
+    def dfs(i, stats, build):
 
-        if slot_index >= len(slot_list):
+        nonlocal best_score, best_build, checked
+
+        if i >= len(slot_list):
 
             checked += 1
 
-            if checked % 2000 == 0:
+            score = calculate_score(stats, gcd_target)
 
-                log(f"Checked {checked} builds")
+            if score > best_score:
 
-                if progress_callback:
-                    progress_callback(checked)
+                best_score = score
+                best_build = build.copy()
 
-            score = calculate_score(stats, target_gcd)
+                log(f"New best score {round(score,2)}")
 
-            best.append((score, build.copy()))
-
-            best.sort(reverse=True)
-
-            if len(best) > 10:
-                best.pop()
+            if checked % 2000 == 0 and progress:
+                progress(checked)
 
             return
 
-        for item in slot_list[slot_index]:
+
+        for item in slot_list[i]:
 
             new_stats = stats.copy()
 
-            for stat in ["crit", "dh", "det", "sps"]:
-                new_stats[stat] = new_stats.get(stat, 0) + item.get(stat, 0)
+            for s in ["crit","dh","det","sps"]:
+                new_stats[s] = new_stats.get(s,0) + item.get(s,0)
 
             build.append(item)
 
-            dfs(slot_index + 1, build, new_stats)
+            dfs(i+1,new_stats,build)
 
             build.pop()
 
-    dfs(0, [], {})
 
-    log("Solver finished")
+    dfs(0,{},[])
 
-    results = []
+    log(f"Solver checked {checked} builds")
 
-    rank = 1
-
-    for score, build in best:
-
-        results.append({
-            "rank": rank,
-            "score": round(score, 2),
-            "items": [i["name"] for i in build]
-        })
-
-        rank += 1
-
-    return results
+    return best_build, best_score
