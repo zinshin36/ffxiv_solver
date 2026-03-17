@@ -22,13 +22,15 @@ def is_blm_weapon(name):
 
 def is_casting_gear(row, headers):
     """
-    Detect casting gear using ClassJobCategory column
+    Detect casting gear using ClassJobCategory
     """
 
     for key in headers:
         if "classjobcategory" in key.lower():
-            val = row.get(key, "").lower()
-            if "thaumaturge" in val or "black mage" in val or "caster" in val:
+            val = str(row.get(key, "")).lower()
+            if any(x in val for x in [
+                "thaumaturge", "black mage", "caster"
+            ]):
                 return True
 
     return False
@@ -56,7 +58,6 @@ def parse_items(path):
         name_col = find_column(headers, ["name"])
         ilvl_col = find_column(headers, ["levelitem", "itemlevel"])
         slot_col = find_column(headers, ["equipslotcategory"])
-        dmg_col = find_column(headers, ["damagephys", "damage"])
 
         log(f"Using columns -> name:{name_col} ilvl:{ilvl_col} slot:{slot_col}")
 
@@ -65,18 +66,18 @@ def parse_items(path):
             name = row.get(name_col)
             ilvl = safe_int(row.get(ilvl_col))
 
-            # sanity check (fix insane ilvl bug)
+            # sanity filter (fix broken ilvl issue)
             if ilvl <= 0 or ilvl > 1000:
                 continue
 
             slot = row.get(slot_col)
 
-            # --- FILTER: only casting gear ---
+            # --- ONLY casting gear ---
             if not is_casting_gear(row, headers):
                 continue
 
-            # --- FILTER: weapons ---
-            if slot == "1":  # weapon slot
+            # --- ONLY BLM weapons ---
+            if str(slot) == "1":
                 if not is_blm_weapon(name):
                     continue
 
@@ -91,10 +92,9 @@ def parse_items(path):
                 "materia_slots": 2
             }
 
-            # --- stat parsing (robust) ---
+            # --- stat parsing ---
             for h in headers:
                 hl = h.lower()
-
                 val = safe_int(row.get(h))
 
                 if "criticalhit" in hl:
@@ -110,11 +110,12 @@ def parse_items(path):
 
     log(f"Items parsed ({len(items)})")
 
-    if items:
-        max_ilvl = max(i["ilvl"] for i in items)
-    else:
-        max_ilvl = 0
-
+    max_ilvl = max([i["ilvl"] for i in items], default=0)
     log(f"Highest item level detected: {max_ilvl}")
 
     return items
+
+
+# ✅ THIS FIXES YOUR ERROR
+def load_all_items(path):
+    return parse_items(path)
