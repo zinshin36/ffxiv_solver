@@ -11,36 +11,61 @@ VALID_SLOTS = [
 
 
 def normalize_slot(slot):
+    """
+    Handles BOTH:
+    - Numeric slot IDs (from EquipSlotCategory)
+    - String slot names (fallback)
+    """
 
-    if not slot:
+    if slot is None:
         return None
 
+    # --- CASE 1: numeric slot ID ---
+    try:
+        slot_id = int(slot)
+
+        SLOT_MAP = {
+            1: "weapon",
+            2: "weapon",
+            3: "head",
+            4: "body",
+            5: "hands",
+            6: "hands",
+            7: "legs",
+            8: "feet",
+            9: "earrings",
+            10: "necklace",
+            11: "bracelet",
+            12: "ring",
+        }
+
+        return SLOT_MAP.get(slot_id)
+
+    except:
+        pass
+
+    # --- CASE 2: string fallback ---
     s = str(slot).lower()
 
-    # Weapons
     if "mainhand" in s or "weapon" in s:
         return "weapon"
-
-    # Armor
     if "head" in s:
         return "head"
     if "body" in s or "chest" in s:
         return "body"
-    if "hand" in s and "mainhand" not in s:
+    if "hand" in s:
         return "hands"
     if "leg" in s:
         return "legs"
-    if "feet" in s or "foot" in s:
+    if "foot" in s:
         return "feet"
-
-    # Accessories
     if "ear" in s:
         return "earrings"
     if "neck" in s:
         return "necklace"
-    if "wrist" in s or "brace" in s:
+    if "brace" in s or "wrist" in s:
         return "bracelet"
-    if "finger" in s or "ring" in s:
+    if "ring" in s or "finger" in s:
         return "ring"
 
     return None
@@ -49,6 +74,10 @@ def normalize_slot(slot):
 def group_slots(items):
 
     slots = {k: [] for k in VALID_SLOTS}
+
+    # DEBUG: show raw slot values (first 20)
+    for item in items[:20]:
+        log(f"SLOT RAW: {item.get('slot')}")
 
     for item in items:
 
@@ -59,7 +88,7 @@ def group_slots(items):
 
         slots[slot].append(item)
 
-    # DEBUG OUTPUT
+    # DEBUG: show counts
     for s in VALID_SLOTS:
         log(f"{s}: {len(slots[s])} items")
 
