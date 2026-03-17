@@ -3,7 +3,6 @@ from engine.dps import calculate_score
 
 MAX_PER_SLOT = 5
 
-
 VALID_SLOTS = [
     "weapon", "head", "body", "hands",
     "legs", "feet", "earrings",
@@ -13,18 +12,36 @@ VALID_SLOTS = [
 
 def normalize_slot(slot):
 
-    s = slot.lower()
+    if not slot:
+        return None
 
-    if "weapon" in s: return "weapon"
-    if "head" in s: return "head"
-    if "body" in s: return "body"
-    if "hand" in s: return "hands"
-    if "leg" in s: return "legs"
-    if "feet" in s: return "feet"
-    if "ear" in s: return "earrings"
-    if "neck" in s: return "necklace"
-    if "brace" in s: return "bracelet"
-    if "ring" in s: return "ring"
+    s = str(slot).lower()
+
+    # Weapons
+    if "mainhand" in s or "weapon" in s:
+        return "weapon"
+
+    # Armor
+    if "head" in s:
+        return "head"
+    if "body" in s or "chest" in s:
+        return "body"
+    if "hand" in s and "mainhand" not in s:
+        return "hands"
+    if "leg" in s:
+        return "legs"
+    if "feet" in s or "foot" in s:
+        return "feet"
+
+    # Accessories
+    if "ear" in s:
+        return "earrings"
+    if "neck" in s:
+        return "necklace"
+    if "wrist" in s or "brace" in s:
+        return "bracelet"
+    if "finger" in s or "ring" in s:
+        return "ring"
 
     return None
 
@@ -35,12 +52,16 @@ def group_slots(items):
 
     for item in items:
 
-        slot = normalize_slot(item["slot"])
+        slot = normalize_slot(item.get("slot"))
 
         if not slot:
             continue
 
         slots[slot].append(item)
+
+    # DEBUG OUTPUT
+    for s in VALID_SLOTS:
+        log(f"{s}: {len(slots[s])} items")
 
     return slots
 
@@ -50,7 +71,10 @@ def trim_slots(slots):
     for slot in slots:
 
         slots[slot].sort(
-            key=lambda x: x.get("crit",0)+x.get("dh",0)+x.get("det",0)+x.get("sps",0),
+            key=lambda x: x.get("crit", 0)
+                        + x.get("dh", 0)
+                        + x.get("det", 0)
+                        + x.get("sps", 0),
             reverse=True
         )
 
@@ -65,10 +89,10 @@ def solve(items, gcd_target, progress=None):
 
     trim_slots(slots)
 
-    # Build slot order (rings twice)
     slot_order = [
-        "weapon","head","body","hands","legs","feet",
-        "earrings","necklace","bracelet","ring","ring"
+        "weapon", "head", "body", "hands",
+        "legs", "feet", "earrings",
+        "necklace", "bracelet", "ring", "ring"
     ]
 
     slot_items = []
@@ -92,7 +116,6 @@ def solve(items, gcd_target, progress=None):
 
     checked = 0
 
-
     def dfs(i, stats, build):
 
         nonlocal best_score, best_build, checked
@@ -106,29 +129,27 @@ def solve(items, gcd_target, progress=None):
             if score > best_score:
                 best_score = score
                 best_build = build.copy()
-                log(f"New best {round(score,2)}")
+                log(f"New best {round(score, 2)}")
 
             if checked % 1000 == 0:
                 log(f"Progress {checked}/{total}")
                 if progress:
-                    progress(int((checked/total)*100))
+                    progress(int((checked / total) * 100))
 
             return
-
 
         for item in slot_items[i]:
 
             new_stats = stats.copy()
 
-            for s in ["crit","dh","det","sps"]:
-                new_stats[s] = new_stats.get(s,0)+item.get(s,0)
+            for s in ["crit", "dh", "det", "sps"]:
+                new_stats[s] = new_stats.get(s, 0) + item.get(s, 0)
 
             build.append(item)
 
-            dfs(i+1,new_stats,build)
+            dfs(i + 1, new_stats, build)
 
             build.pop()
-
 
     dfs(0, {}, [])
 
