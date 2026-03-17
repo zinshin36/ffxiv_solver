@@ -1,7 +1,8 @@
 from engine.logger import log
 from engine.dps import calculate_score
 
-MAX_PER_SLOT = 4  # ⬅️ reduced from 5 (huge speed gain)
+# keep more items per slot for full search
+MAX_PER_SLOT = 6
 
 VALID_SLOTS = [
     "weapon", "head", "body", "hands",
@@ -31,7 +32,7 @@ def normalize_slot(slot):
             10: "necklace",
             11: "bracelet",
             12: "ring",
-            13: "head",  
+            13: "head",  # shared armor category in your data
         }
 
         return SLOT_MAP.get(slot_id)
@@ -81,15 +82,19 @@ def group_slots(items):
 
 
 def trim_slots(slots):
+    """
+    Keep top N per slot but DO NOT prune aggressively
+    Just sort by raw stat sum so we don't explode to billions
+    """
 
     for slot in slots:
 
         slots[slot].sort(
             key=lambda x: (
-                x.get("crit", 0) * 1.0 +
-                x.get("dh", 0) * 0.9 +
-                x.get("det", 0) * 0.8 +
-                x.get("sps", 0) * 0.7
+                x.get("crit", 0)
+                + x.get("dh", 0)
+                + x.get("det", 0)
+                + x.get("sps", 0)
             ),
             reverse=True
         )
@@ -118,39 +123,41 @@ def solve(items, gcd_target, progress=None):
             return None, 0
         slot_items.append(slots[s])
 
-    # 🔥 MUCH smaller now
+    # total combinations
     total = 1
     for s in slot_items:
         total *= len(s)
 
-    log(f"Reduced combinations: {total}")
+    log(f"Total combinations: {total}")
 
-    best_score = 0
+    best_score = -1
     best_build = None
+
     checked = 0
 
     def dfs(i, stats, build):
 
         nonlocal best_score, best_build, checked
 
-        # 🔥 PRUNE: skip weak builds early
-        if stats.get("crit", 0) < best_score * 0.1:
-            return
-
         if i == len(slot_items):
 
             checked += 1
+
             score = calculate_score(stats, gcd_target)
 
+            # ALWAYS allow updates (no filtering)
             if score > best_score:
                 best_score = score
                 best_build = build.copy()
                 log(f"New best {round(score, 2)}")
 
+            # progress logging (VISIBLE + steady)
             if checked % 1000 == 0:
-                log(f"Checked {checked}")
+                percent = int((checked / total) * 100)
+                log(f"Progress {checked}/{total} ({percent}%)")
+
                 if progress:
-                    progress(min(100, int(checked / total * 100)))
+                    progress(percent)
 
             return
 
@@ -162,7 +169,9 @@ def solve(items, gcd_target, progress=None):
                 new_stats[s] = new_stats.get(s, 0) + item.get(s, 0)
 
             build.append(item)
+
             dfs(i + 1, new_stats, build)
+
             build.pop()
 
     dfs(0, {}, [])
