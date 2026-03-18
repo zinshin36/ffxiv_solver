@@ -2,7 +2,6 @@ from engine.logger import log
 from engine.dps import calculate_score
 from engine.materia import apply_materia
 
-# keep this reasonable so we don't hit billions
 MAX_PER_SLOT = 6
 
 VALID_SLOTS = [
@@ -14,57 +13,18 @@ VALID_SLOTS = [
 
 def normalize_slot(slot):
 
-    if slot is None:
-        return None
-
     try:
-        slot_id = int(slot)
-
-        SLOT_MAP = {
-            1: "weapon",
-            2: "weapon",
-            3: "head",
-            4: "body",
-            5: "hands",
-            6: "hands",
-            7: "legs",
-            8: "feet",
-            9: "earrings",
-            10: "necklace",
-            11: "bracelet",
-            12: "ring",
-            13: "head",  # shared armor category (your data quirk)
-        }
-
-        return SLOT_MAP.get(slot_id)
-
+        slot = int(slot)
+        return {
+            1: "weapon", 2: "weapon",
+            3: "head", 4: "body",
+            5: "hands", 6: "hands",
+            7: "legs", 8: "feet",
+            9: "earrings", 10: "necklace",
+            11: "bracelet", 12: "ring"
+        }.get(slot)
     except:
-        pass
-
-    s = str(slot).lower()
-
-    if "weapon" in s:
-        return "weapon"
-    if "head" in s:
-        return "head"
-    if "body" in s:
-        return "body"
-    if "hand" in s:
-        return "hands"
-    if "leg" in s:
-        return "legs"
-    if "foot" in s:
-        return "feet"
-    if "ear" in s:
-        return "earrings"
-    if "neck" in s:
-        return "necklace"
-    if "brace" in s:
-        return "bracelet"
-    if "ring" in s:
-        return "ring"
-
-    return None
+        return None
 
 
 def group_slots(items):
@@ -72,113 +32,63 @@ def group_slots(items):
     slots = {k: [] for k in VALID_SLOTS}
 
     for item in items:
-        slot = normalize_slot(item.get("slot"))
-        if slot:
-            slots[slot].append(item)
-
-    for s in VALID_SLOTS:
-        log(f"{s}: {len(slots[s])} items")
+        s = normalize_slot(item["slot"])
+        if s:
+            slots[s].append(item)
 
     return slots
 
 
 def trim_slots(slots):
-    """
-    Keep top N per slot by raw stat sum
-    (NOT pruning logic — just prevents explosion)
-    """
-
-    for slot in slots:
-
-        slots[slot].sort(
-            key=lambda x: (
-                x.get("crit", 0)
-                + x.get("dh", 0)
-                + x.get("det", 0)
-                + x.get("sps", 0)
-            ),
+    for s in slots:
+        slots[s].sort(
+            key=lambda x: x["crit"] + x["dh"] + x["det"] + x["sps"],
             reverse=True
         )
+        slots[s] = slots[s][:MAX_PER_SLOT]
 
-        slots[slot] = slots[slot][:MAX_PER_SLOT]
 
-
-def solve(items, gcd_target, progress=None):
+def solve(items, gcd_target):
 
     log("Starting solver")
 
     slots = group_slots(items)
     trim_slots(slots)
 
-    slot_order = [
-        "weapon", "head", "body", "hands",
-        "legs", "feet", "earrings",
-        "necklace", "bracelet", "ring", "ring"
+    order = [
+        "weapon","head","body","hands","legs",
+        "feet","earrings","necklace","bracelet","ring","ring"
     ]
 
-    slot_items = []
+    slot_items = [slots[s] for s in order]
 
-    for s in slot_order:
-        if not slots[s]:
-            log(f"Missing slot: {s}")
-            return None, 0
-        slot_items.append(slots[s])
-
-    # total combinations
-    total = 1
-    for s in slot_items:
-        total *= len(s)
-
-    log(f"Total combinations: {total}")
-
-    best_score = -1
-    best_build = None
-
-    checked = 0
+    best_sets = []
 
     def dfs(i, stats, build):
 
-        nonlocal best_score, best_build, checked
-
         if i == len(slot_items):
-
-            checked += 1
 
             score = calculate_score(stats, gcd_target)
 
-            if score > best_score:
-                best_score = score
-                best_build = build.copy()
-                log(f"New best {round(score, 2)}")
-
-            if checked % 1000 == 0:
-                percent = int((checked / total) * 100)
-                log(f"Progress {checked}/{total} ({percent}%)")
-
-                if progress:
-                    progress(percent)
+            best_sets.append((score, build.copy()))
 
             return
 
-        for base_item in slot_items[i]:
+        for base in slot_items[i]:
 
-            # 🔥 IMPORTANT: copy item before applying materia
-            item = base_item.copy()
-            item = apply_materia(item)
+            item = apply_materia(base.copy())
 
             new_stats = stats.copy()
 
-            for s in ["crit", "dh", "det", "sps"]:
-                new_stats[s] = new_stats.get(s, 0) + item.get(s, 0)
+            for s in ["crit","dh","det","sps"]:
+                new_stats[s] = new_stats.get(s,0) + item.get(s,0)
 
             build.append(item)
-
-            dfs(i + 1, new_stats, build)
-
+            dfs(i+1, new_stats, build)
             build.pop()
 
     dfs(0, {}, [])
 
-    log(f"Finished. Checked {checked}")
+    best_sets.sort(reverse=True, key=lambda x: x[0])
 
-    return best_build, best_score
+    return best_sets[:3]
