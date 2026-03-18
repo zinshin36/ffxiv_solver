@@ -2,20 +2,35 @@ import os
 from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
+
+def is_caster_item(name):
+    n = name.lower()
+
+    # allow caster gear only
+    if any(x in n for x in [
+        "casting",
+        "caster",
+        "black mage",
+        "thaum",
+        "rod",
+        "staff",
+        "grimoire"
+    ]):
+        return True
+
+    return False
+
+
 def load_all_items():
     log("Loading Item.csv...")
 
     rows = load_csv("Item.csv")
 
-    if not rows or len(rows) < 2:
-        raise Exception("Item.csv is empty or invalid")
-
     header = rows[0]
 
     def find_col(keys):
         for i, h in enumerate(header):
-            h = h.lower()
-            if any(k in h for k in keys):
+            if any(k in h.lower() for k in keys):
                 return i
         return None
 
@@ -27,39 +42,36 @@ def load_all_items():
     dh_i = find_col(["directhit"])
     sps_i = find_col(["spellspeed"])
 
-    if name_i is None or ilvl_i is None or slot_i is None:
-        raise Exception("Failed to detect required columns in Item.csv")
-
     items = []
     max_ilvl = 0
 
-    for i, r in enumerate(rows[1:]):
+    for r in rows[1:]:
 
-        try:
-            name = r[name_i]
-            ilvl = to_int(r[ilvl_i])
-            slot = r[slot_i]
+        name = r[name_i]
 
-            item = {
-                "name": name,
-                "ilvl": ilvl,
-                "slot": slot,
-                "crit": to_int(r[crit_i]) if crit_i is not None else 0,
-                "det": to_int(r[det_i]) if det_i is not None else 0,
-                "dh": to_int(r[dh_i]) if dh_i is not None else 0,
-                "sps": to_int(r[sps_i]) if sps_i is not None else 0,
-                "materia_slots": 2
-            }
+        # 🔥 FILTER HERE
+        if not is_caster_item(name):
+            continue
 
-            items.append(item)
+        ilvl = to_int(r[ilvl_i])
 
-            if ilvl > max_ilvl:
-                max_ilvl = ilvl
+        item = {
+            "name": name,
+            "ilvl": ilvl,
+            "slot": r[slot_i],
+            "crit": to_int(r[crit_i]) if crit_i else 0,
+            "det": to_int(r[det_i]) if det_i else 0,
+            "dh": to_int(r[dh_i]) if dh_i else 0,
+            "sps": to_int(r[sps_i]) if sps_i else 0,
+            "materia_slots": 2
+        }
 
-        except Exception as e:
-            log(f"Row {i} skipped: {e}")
+        items.append(item)
 
-    log(f"Loaded {len(items)} items")
-    log(f"Max ilvl detected: {max_ilvl}")
+        if ilvl > max_ilvl:
+            max_ilvl = ilvl
+
+    log(f"Caster items loaded: {len(items)}")
+    log(f"Max ilvl: {max_ilvl}")
 
     return items, max_ilvl
