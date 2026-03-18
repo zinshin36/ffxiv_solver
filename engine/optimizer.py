@@ -1,35 +1,14 @@
 import itertools
 import time
 
-
-def log(msg):
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
-
-
-# =========================
-# DPS FUNCTION (REALISTIC)
-# =========================
-def calc_dps(stats):
-    crit = stats["crit"]
-    dh = stats["dh"]
-    det = stats["det"]
-    sps = stats["sps"]
-    intel = stats["int"]
-
-    # basic BLM scaling
-    return (
-        intel * 1.0 +
-        crit * 0.45 +
-        dh * 0.35 +
-        det * 0.30 +
-        sps * 0.25
-    )
+from engine.materia_optimizer import optimize_materia_for_set
+from engine.tier_solver import calculate_gcd
+from engine.dps_model import compute_dps
+from engine.logger import log
 
 
-# =========================
-# BUILD SOLVER
-# =========================
-def solve(items, foods):
+def solve(items, target_gcd, foods=None, top_n=3):
+
     slots = [
         "weapon", "head", "body", "hands",
         "legs", "feet", "earrings",
@@ -42,21 +21,21 @@ def solve(items, foods):
         if item["slot"] in gear:
             gear[item["slot"]].append(item)
 
-    for s in gear:
-        log(f"{s}: {len(gear[s])} items")
+    for s in slots:
+        log(f"{s}: {len(gear[s])}")
+
+    total = 1
+    for s in slots:
+        total *= max(1, len(gear[s]))
+    total *= max(1, len(gear["ring"]))
+
+    log(f"Total combinations: {total}")
 
     combos = itertools.product(
-        gear["weapon"],
-        gear["head"],
-        gear["body"],
-        gear["hands"],
-        gear["legs"],
-        gear["feet"],
-        gear["earrings"],
-        gear["necklace"],
-        gear["bracelet"],
-        gear["ring"],
-        gear["ring"]
+        gear["weapon"], gear["head"], gear["body"], gear["hands"],
+        gear["legs"], gear["feet"], gear["earrings"],
+        gear["necklace"], gear["bracelet"],
+        gear["ring"], gear["ring"]
     )
 
     best = []
@@ -66,33 +45,45 @@ def solve(items, foods):
     for combo in combos:
         checked += 1
 
-        if checked % 10000 == 0:
+        if checked % 1000 == 0:
             elapsed = time.time() - start
-            log(f"Checked {checked} builds ({elapsed:.1f}s)")
+            pct = int((checked / total) * 100)
+            log(f"{checked}/{total} ({pct}%) | {elapsed:.1f}s")
 
-        stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-
-        for item in combo:
-            for k in stats:
-                stats[k] += item["stats"][k]
+        materia_stats, melds = optimize_materia_for_set(combo)
 
         best_score = 0
         best_food = None
+        best_stats = None
 
-        for food in foods:
-            total = stats.copy()
+        for food in foods or [{}]:
+            total_stats = materia_stats.copy()
+
             for k in food:
-                if k in total:
-                    total[k] += food[k]
+                if k != "name":
+                    total_stats[k] += food[k]
 
-            score = calc_dps(total)
+            gcd = calculate_gcd(total_stats["sps"])
+            dps = compute_dps(total_stats)
+
+            penalty = abs(gcd - target_gcd) * 2000
+            score = dps - penalty
 
             if score > best_score:
                 best_score = score
-                best_food = food
+                best_food = food.get("name", "None")
+                best_stats = total_stats
 
-        best.append((best_score, combo, best_food))
+        best.append({
+            "score": best_score,
+            "build": combo,
+            "food": best_food,
+            "stats": best_stats,
+            "melds": melds
+        })
 
-    best.sort(reverse=True, key=lambda x: x[0])
+    best.sort(key=lambda x: x["score"], reverse=True)
 
-    return best[:3]
+    log("Finished solver")
+
+    return best[:top_n]
