@@ -1,103 +1,150 @@
 import itertools
-from collections import defaultdict
 from engine.logger import log
-from engine.dps import calculate_score
+from engine.dps_model import compute_dps
 from engine.food import apply_food
 
 
-def group_by_slot(items):
-    slots = defaultdict(list)
+# REAL SLOT LIST (forces full builds)
+SLOTS = [
+    "weapon", "head", "body", "hands", "legs", "feet",
+    "earrings", "necklace", "bracelet", "ring"
+]
+
+
+def detect_slot(item_name):
+    name = item_name.lower()
+
+    if "sword" in name or "staff" in name or "rod" in name:
+        return "weapon"
+    if "helm" in name or "hat" in name:
+        return "head"
+    if "coat" in name or "robe" in name:
+        return "body"
+    if "gloves" in name:
+        return "hands"
+    if "pants" in name or "trousers" in name:
+        return "legs"
+    if "boots" in name:
+        return "feet"
+    if "earring" in name:
+        return "earrings"
+    if "necklace" in name:
+        return "necklace"
+    if "bracelet" in name:
+        return "bracelet"
+    if "ring" in name:
+        return "ring"
+
+    return None
+
+
+def is_caster(item):
+    name = item["name"].lower()
+    return any(x in name for x in ["caster", "mage", "sorcerer", "black", "thaum"])
+
+
+def group_items(items):
+    slots = {s: [] for s in SLOTS}
 
     for item in items:
-        slots[item["slot"]].append(item)
+        if not is_caster(item):
+            continue
+
+        slot = detect_slot(item["name"])
+
+        if slot:
+            slots[slot].append(item)
+
+    # remove empty slots (prevents crash)
+    slots = {k: v for k, v in slots.items() if v}
 
     return slots
 
 
 def sum_stats(build):
-    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
+    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 1000}
 
     for item in build:
-        total["crit"] += item.get("crit", 0)
-        total["dh"] += item.get("dh", 0)
-        total["det"] += item.get("det", 0)
-        total["sps"] += item.get("sps", 0)
+        total["crit"] += item["crit"]
+        total["dh"] += item["dh"]
+        total["det"] += item["det"]
+        total["sps"] += item["sps"]
 
     return total
 
 
-def attach_fake_materia(build):
-    for item in build:
-        item["materia_applied"] = [
-            {"stat": "crit", "value": 36},
-            {"stat": "crit", "value": 36},
-        ]
-    return build
+def apply_materia(item):
+    melds = []
+
+    # simple priority: crit > dh > det > sps
+    for _ in range(item.get("materia_slots", 2)):
+        item["crit"] += 36
+        melds.append({"stat": "crit", "value": 36})
+
+    item["materia_applied"] = melds
+    return item
 
 
 def solve(items, target_gcd, progress=None, top_n=3, foods=None):
-    log("Starting solver...")
+    log("Starting REAL solver...")
 
-    if not items:
-        return []
+    slot_groups = group_items(items)
 
-    slot_groups = group_by_slot(items)
-
-    # Light pruning (NOT a cap, just sanity)
     for slot in slot_groups:
+        # keep more items since you want full brute force
         slot_groups[slot] = sorted(
             slot_groups[slot],
             key=lambda x: x["ilvl"],
             reverse=True
-        )[:10]
+        )[:12]
 
-    slots = list(slot_groups.keys())
-    values = [slot_groups[s] for s in slots]
+    keys = list(slot_groups.keys())
+    values = [slot_groups[k] for k in keys]
 
-    total_combinations = 1
+    total = 1
     for v in values:
-        total_combinations *= len(v)
+        total *= len(v)
 
-    log(f"Total combinations to evaluate: {total_combinations}")
+    log(f"Total combinations: {total}")
 
-    builds = []
+    results = []
     checked = 0
 
     for combo in itertools.product(*values):
         checked += 1
 
-        if progress and total_combinations > 0:
-            pct = int((checked / total_combinations) * 100)
-            progress(pct)
+        if progress:
+            progress(int((checked / total) * 100))
 
-        if checked % 1000 == 0:
-            log(f"Progress: {checked}/{total_combinations} ({round((checked/total_combinations)*100,2)}%)")
+        if checked % 2000 == 0:
+            log(f"{checked}/{total} ({round((checked/total)*100,2)}%)")
 
-        build = list(combo)
-        stats = sum_stats(build)
+        build = [apply_materia(dict(item)) for item in combo]
 
-        best_food = "None"
-        best_score = 0
+        base_stats = sum_stats(build)
 
-        if foods:
-            for food in foods:
-                boosted = apply_food(stats, food)
-                score = calculate_score(boosted, target_gcd)
+        best = None
 
-                if score > best_score:
-                    best_score = score
-                    best_food = food["name"]
-        else:
-            best_score = calculate_score(stats, target_gcd)
+        for food in foods:
+            boosted = apply_food(base_stats, food)
+            dps = compute_dps(boosted)
 
-        builds.append({
-            "build": attach_fake_materia(build.copy()),
-            "score": best_score,
-            "food": best_food
+            if not best or dps > best["dps"]:
+                best = {
+                    "dps": dps,
+                    "food": food["name"],
+                    "stats": boosted
+                }
+
+        results.append({
+            "build": build,
+            "score": best["dps"],
+            "food": best["food"],
+            "stats": best["stats"]
         })
 
-    log(f"Finished. Total builds checked: {checked}")
+    results.sort(key=lambda x: x["score"], reverse=True)
 
-    builds.sort(key=lambda x: x["score"], reverse=True)
+    log("Solver finished")
 
-    return builds[:top_n]
+    return results[:top_n]
