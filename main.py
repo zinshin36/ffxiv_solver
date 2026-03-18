@@ -15,6 +15,10 @@ max_ilvl = 0
 foods = []
 
 
+# -------------------------
+# FOOD SYSTEM
+# -------------------------
+
 def load_foods():
 
     global foods
@@ -42,6 +46,10 @@ def load_foods():
     log(f"{len(foods)} foods loaded")
 
 
+# -------------------------
+# LOAD GAME DATA
+# -------------------------
+
 def load_game_data():
 
     global items, max_ilvl
@@ -60,6 +68,10 @@ def load_game_data():
     except Exception as e:
         log(f"ERROR loading data: {e}")
 
+
+# -------------------------
+# SOLVER
+# -------------------------
 
 def run_solver():
 
@@ -84,16 +96,77 @@ def run_solver():
 
         log(f"Items after filter: {len(filtered)}")
 
-        best_build, score = solve(filtered, gcd)
+        results = solve(filtered, gcd)
 
-        if not best_build:
-            log("No build found")
+        if not results:
+            log("No builds found")
             return
 
-        log(f"Best score {round(score, 2)}")
+        log("")
+        log("===== TOP BUILDS =====")
 
-        for item in best_build:
-            log(item["name"])
+        final_scores = []
+
+        for idx, (score, build) in enumerate(results):
+
+            log("")
+            log(f"--- Build #{idx+1} ---")
+            log(f"Base Score: {round(score, 2)}")
+
+            stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
+
+            for item in build:
+
+                log(item["name"])
+
+                # Show materia
+                for m in item.get("melds", []):
+                    log(f"   -> {m}")
+
+                # Accumulate stats
+                for s in stats:
+                    stats[s] += item.get(s, 0)
+
+            # -------------------------
+            # FOOD OPTIMIZATION
+            # -------------------------
+
+            best_food = None
+            best_food_score = 0
+
+            for food in foods:
+
+                fs = stats.copy()
+
+                for k, v in food.items():
+                    if k != "name":
+                        fs[k] = fs.get(k, 0) + v
+
+                s = calculate_score(fs, gcd)
+
+                if s > best_food_score:
+                    best_food_score = s
+                    best_food = food["name"]
+
+            final_scores.append(best_food_score)
+
+            log(f"Best Food: {best_food}")
+            log(f"Final Score w/ Food: {round(best_food_score, 2)}")
+
+        # -------------------------
+        # SCORE DIFFERENCES
+        # -------------------------
+
+        log("")
+        log("===== DIFFERENCES =====")
+
+        if len(final_scores) >= 2:
+            diff = final_scores[0] - final_scores[1]
+            log(f"#1 vs #2: {round(diff, 2)}")
+
+        if len(final_scores) >= 3:
+            diff = final_scores[1] - final_scores[2]
+            log(f"#2 vs #3: {round(diff, 2)}")
 
     except Exception as e:
         log(f"Solver error: {e}")
@@ -103,7 +176,10 @@ def solver_thread():
     threading.Thread(target=run_solver, daemon=True).start()
 
 
-# UI
+# -------------------------
+# UI SETUP
+# -------------------------
+
 root = tk.Tk()
 root.title("FFXIV Gear Solver")
 
@@ -123,7 +199,6 @@ tk.Button(controls, text="Run Solver", command=solver_thread).grid(row=0, column
 tk.Label(controls, text="Max ilvl").grid(row=0, column=4)
 
 max_ilvl_var = tk.StringVar(value="-")
-
 tk.Label(controls, textvariable=max_ilvl_var, width=6).grid(row=0, column=5)
 
 options = tk.Frame(root)
