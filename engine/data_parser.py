@@ -10,6 +10,11 @@ def find_column(header, keywords):
         for key in keywords:
             if key in name:
                 return i
+
+    log("HEADER DUMP:")
+    for i, col in enumerate(header):
+        log(f"{i}: {col}")
+
     raise Exception(f"Column not found for {keywords}")
 
 
@@ -134,7 +139,8 @@ def load_items():
         header = next(reader)
         next(reader)
 
-        name_i = find_column(header, ["name"])
+        # 🔥 MUCH STRONGER MATCHING
+        name_i = find_column(header, ["name", "singular"])
         ilvl_i = find_column(header, ["level{item}", "itemlevel"])
         slot_i = find_column(header, ["equipslotcategory"])
         job_i = find_column(header, ["classjobcategory"])
