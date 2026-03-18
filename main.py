@@ -10,7 +10,6 @@ from engine.optimizer import solve
 from engine.blacklist import load_blacklist, is_blacklisted
 from engine.dps import calculate_score
 
-
 items = []
 max_ilvl = 0
 foods = []
@@ -43,104 +42,23 @@ def load_foods():
     log(f"{len(foods)} foods loaded")
 
 
-def apply_food(stats, food):
-
-    result = stats.copy()
-
-    for k, v in food.items():
-        if k == "name":
-            continue
-
-        result[k] = result.get(k, 0) + v
-
-    return result
-
-
-# SAFE — does NOT break solver if job data is missing
-def is_blm_item(item):
-
-    possible_fields = [
-        "job",
-        "classjob",
-        "ClassJob",
-        "ClassJobCategory",
-        "EquipRestriction"
-    ]
-
-    combined = ""
-
-    for f in possible_fields:
-        if f in item:
-            combined += str(item.get(f, "")) + " "
-
-    combined = combined.lower()
-
-    # DEBUG ONCE
-    if not hasattr(is_blm_item, "printed"):
-        print("DEBUG SAMPLE ITEM:", item)
-        is_blm_item.printed = True
-
-    # soft match (won’t eliminate everything)
-    if any(x in combined for x in ["black", "blm", "thaum", "caster", "mage"]):
-        return True
-
-    # fallback: allow if no job info exists
-    if combined.strip() == "":
-        return True
-
-    return False
-
-
 def load_game_data():
 
     global items, max_ilvl
 
-    log("Loading game data...")
+    try:
+        log("Loading game data...")
 
-    items, max_ilvl = load_all_items()
+        items, max_ilvl = load_all_items()
 
-    max_ilvl_var.set(str(max_ilvl))
+        max_ilvl_var.set(str(max_ilvl))
 
-    load_foods()
+        load_foods()
 
-    log(f"Game data loaded. Highest ilvl: {max_ilvl}")
+        log(f"Game data loaded. Highest ilvl: {max_ilvl}")
 
-
-def update_progress(v):
-
-    progress_var.set(v)
-    root.update_idletasks()
-
-
-def detect_best_food(build, gcd):
-
-    if not build:
-        return
-
-    stats = {}
-
-    for item in build:
-        for s in ["crit", "dh", "det", "sps"]:
-            stats[s] = stats.get(s, 0) + item.get(s, 0)
-
-    scores = []
-
-    for food in foods:
-
-        fs = apply_food(stats, food)
-        score = calculate_score(fs, gcd)
-
-        scores.append((score, food["name"]))
-
-    scores.sort(reverse=True)
-
-    log("")
-    log("Top foods:")
-
-    for score, name in scores[:5]:
-        log(f"{name}  score {round(score,2)}")
-
-    log("")
+    except Exception as e:
+        log(f"ERROR loading data: {e}")
 
 
 def run_solver():
@@ -149,45 +67,45 @@ def run_solver():
         log("No game data loaded")
         return
 
-    min_ilvl = int(min_ilvl_entry.get())
-    gcd = float(gcd_entry.get())
+    try:
+        min_ilvl = int(min_ilvl_entry.get())
+        gcd = float(gcd_entry.get())
 
-    blacklist = load_blacklist()
+        blacklist = load_blacklist()
 
-    log(f"Min ilvl {min_ilvl}")
-    log(f"GCD target {gcd}")
+        log(f"Min ilvl {min_ilvl}")
+        log(f"GCD target {gcd}")
 
-    # ✅ FIX: REMOVE HARD BLM FILTER (was causing 0 items)
-    filtered = [
-        i for i in items
-        if i["ilvl"] >= min_ilvl
-        and not is_blacklisted(i["name"], blacklist)
-    ]
+        filtered = [
+            i for i in items
+            if i["ilvl"] >= min_ilvl
+            and not is_blacklisted(i["name"], blacklist)
+        ]
 
-    log(f"Items after ilvl filter ({len(filtered)})")
+        log(f"Items after filter: {len(filtered)}")
 
-    best_build, score = solve(filtered, gcd, update_progress)
+        best_build, score = solve(filtered, gcd)
 
-    if not best_build:
-        log("No build found")
-        return
+        if not best_build:
+            log("No build found")
+            return
 
-    log("")
-    log(f"Best score {round(score,2)}")
-    log("")
+        log(f"Best score {round(score, 2)}")
 
-    for item in best_build:
-        log(item["name"])
+        for item in best_build:
+            log(item["name"])
 
-    detect_best_food(best_build, gcd)
+    except Exception as e:
+        log(f"Solver error: {e}")
 
 
 def solver_thread():
-    threading.Thread(target=run_solver).start()
+    threading.Thread(target=run_solver, daemon=True).start()
 
 
+# UI
 root = tk.Tk()
-root.title("FFXIV BLM Gear Solver")
+root.title("FFXIV Gear Solver")
 
 controls = tk.Frame(root)
 controls.pack(pady=10)
