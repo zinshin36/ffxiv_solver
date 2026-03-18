@@ -11,7 +11,8 @@ def safe_int(val):
 
 
 def parse_items(path):
-
+    
+    print("DATA_PARSER IMPORTED", flush=True)
     log("STEP 1: entering parse_items")
     start_time = time.time()
 
