@@ -16,7 +16,6 @@ foods = []
 
 
 def load_foods():
-    """Load foods from foods.json or create default."""
     global foods
 
     if not os.path.exists("foods.json"):
@@ -35,50 +34,37 @@ def load_foods():
 
     with open("foods.json", "r") as f:
         foods = json.load(f)
+
     log(f"{len(foods)} foods loaded")
 
 
 def is_blm_item(item):
-    """Check if item is caster/BLM compatible."""
-    possible_fields = ["job", "classjob", "ClassJob", "ClassJobCategory", "EquipRestriction"]
-    combined = ""
-    for f in possible_fields:
-        if f in item:
-            combined += str(item.get(f, "")) + " "
-    combined = combined.lower()
-
-    if any(x in combined for x in ["black", "blm", "thaum", "caster", "mage"]):
-        return True
-
-    # fallback: allow if no job info exists
-    return combined.strip() == ""
+    return True  # keep simple for now
 
 
 def load_game_data():
-    """Load all items and foods."""
     global items, max_ilvl
+
     log("Loading game data...")
 
-    # Load items
     all_items = load_all_items(os.path.join("game_data", "Item.csv"))
-    # Filter caster items
+
     items = [i for i in all_items if is_blm_item(i)]
+
     max_ilvl = max([i.get("ilvl", 0) for i in items]) if items else 0
 
     max_ilvl_var.set(str(max_ilvl))
     load_foods()
 
     log(f"Game data loaded. Highest ilvl: {max_ilvl}")
-    log(f"Caster items loaded: {len(items)}")
+    log(f"Items loaded: {len(items)}")
 
 
 def update_progress(v):
-    progress_var.set(v)
-    root.update_idletasks()
+    root.after(0, lambda: progress_var.set(v))
 
 
 def run_solver():
-    """Run solver with user-selected GCD and min ilvl, display top 3 builds."""
     if not items:
         log("No game data loaded")
         return
@@ -91,7 +77,6 @@ def run_solver():
     log(f"Min ilvl: {min_ilvl_val}")
     log(f"GCD target: {gcd_val}")
 
-    # Filter by ilvl and blacklist
     filtered_items = [
         i for i in items
         if i.get("ilvl", 0) >= min_ilvl_val
@@ -99,20 +84,14 @@ def run_solver():
     ]
 
     log(f"Items after filter: {len(filtered_items)}")
-    if not filtered_items:
-        log("No items found after filter!")
-        return
 
-    # Solve for top 3 builds
     best_builds = solve(filtered_items, gcd_val, progress=update_progress, top_n=3, foods=foods)
 
-    if not best_builds:
-        log("No builds found")
-        return
-
     log("\n=== TOP 3 BUILDS ===")
+
     for i, b in enumerate(best_builds):
         log(f"\n--- Build #{i+1} | Score {round(b['score'],2)} | Food: {b['food']} ---")
+
         for item in b["build"]:
             mat = ", ".join([f"{m['stat']}+{m['value']}" for m in item["materia_applied"]])
             log(f"{item['name']} | Materia: {mat}")
@@ -122,9 +101,6 @@ def solver_thread():
     threading.Thread(target=run_solver).start()
 
 
-# ----------------------
-# GUI SETUP
-# ----------------------
 root = tk.Tk()
 root.title("FFXIV BLM Gear Solver")
 
@@ -146,6 +122,7 @@ tk.Label(controls, textvariable=max_ilvl_var, width=6).grid(row=0, column=5)
 
 options = tk.Frame(root)
 options.pack()
+
 tk.Label(options, text="Target GCD").grid(row=0, column=0)
 gcd_entry = tk.Entry(options, width=6)
 gcd_entry.insert(0, "2.2")
