@@ -1,64 +1,28 @@
 import itertools
+from collections import defaultdict
 from engine.logger import log
 from engine.dps_model import compute_dps
 from engine.food import apply_food
 
 
-# REAL SLOT LIST (forces full builds)
 SLOTS = [
     "weapon", "head", "body", "hands", "legs", "feet",
-    "earrings", "necklace", "bracelet", "ring"
+    "earrings", "necklace", "bracelet", "ring1", "ring2"
 ]
 
 
-def detect_slot(item_name):
-    name = item_name.lower()
-
-    if "sword" in name or "staff" in name or "rod" in name:
-        return "weapon"
-    if "helm" in name or "hat" in name:
-        return "head"
-    if "coat" in name or "robe" in name:
-        return "body"
-    if "gloves" in name:
-        return "hands"
-    if "pants" in name or "trousers" in name:
-        return "legs"
-    if "boots" in name:
-        return "feet"
-    if "earring" in name:
-        return "earrings"
-    if "necklace" in name:
-        return "necklace"
-    if "bracelet" in name:
-        return "bracelet"
-    if "ring" in name:
-        return "ring"
-
-    return None
-
-
-def is_caster(item):
-    name = item["name"].lower()
-    return any(x in name for x in ["caster", "mage", "sorcerer", "black", "thaum"])
-
-
 def group_items(items):
-    slots = {s: [] for s in SLOTS}
+    slots = defaultdict(list)
 
     for item in items:
-        if not is_caster(item):
-            continue
+        if item["slot"] == "ring":
+            slots["ring1"].append(item)
+            slots["ring2"].append(item)
+        else:
+            slots[item["slot"]].append(item)
 
-        slot = detect_slot(item["name"])
-
-        if slot:
-            slots[slot].append(item)
-
-    # remove empty slots (prevents crash)
-    slots = {k: v for k, v in slots.items() if v}
-
-    return slots
+    # remove empty slots
+    return {k: v for k, v in slots.items() if v}
 
 
 def sum_stats(build):
@@ -76,7 +40,6 @@ def sum_stats(build):
 def apply_materia(item):
     melds = []
 
-    # simple priority: crit > dh > det > sps
     for _ in range(item.get("materia_slots", 2)):
         item["crit"] += 36
         melds.append({"stat": "crit", "value": 36})
@@ -86,17 +49,17 @@ def apply_materia(item):
 
 
 def solve(items, target_gcd, progress=None, top_n=3, foods=None):
-    log("Starting REAL solver...")
+    log("Starting FULL solver...")
 
     slot_groups = group_items(items)
 
+    # prune slightly (still large)
     for slot in slot_groups:
-        # keep more items since you want full brute force
         slot_groups[slot] = sorted(
             slot_groups[slot],
             key=lambda x: x["ilvl"],
             reverse=True
-        )[:12]
+        )[:15]
 
     keys = list(slot_groups.keys())
     values = [slot_groups[k] for k in keys]
@@ -116,17 +79,20 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
         if progress:
             progress(int((checked / total) * 100))
 
-        if checked % 2000 == 0:
+        if checked % 5000 == 0:
             log(f"{checked}/{total} ({round((checked/total)*100,2)}%)")
 
-        build = [apply_materia(dict(item)) for item in combo]
+        build = []
 
-        base_stats = sum_stats(build)
+        for item in combo:
+            build.append(apply_materia(dict(item)))
+
+        stats = sum_stats(build)
 
         best = None
 
         for food in foods:
-            boosted = apply_food(base_stats, food)
+            boosted = apply_food(stats, food)
             dps = compute_dps(boosted)
 
             if not best or dps > best["dps"]:
