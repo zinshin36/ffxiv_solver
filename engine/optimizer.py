@@ -1,82 +1,109 @@
-import csv
-import time
+import itertools
+from collections import defaultdict
 from engine.logger import log
+from engine.dps import calculate_score
+from engine.food import apply_food
 
 
-def safe_int(val):
-    """Convert value to int, return 0 if fails."""
-    try:
-        if val is None or val == "":
-            return 0
-        return int(float(val))
-    except:
-        return 0
+def group_by_slot(items):
+    slots = defaultdict(list)
+
+    for item in items:
+        slots[item["slot"]].append(item)
+
+    return slots
 
 
-def normalize_header(h):
-    """Lowercase and remove spaces/underscores for matching."""
-    return h.lower().replace("_", "").replace(" ", "")
+def combine_builds(slot_groups):
+    """
+    Generate all combinations (1 item per slot)
+    WARNING: can explode if too many items per slot
+    """
+    keys = list(slot_groups.keys())
+    values = [slot_groups[k] for k in keys]
+
+    for combo in itertools.product(*values):
+        yield list(combo)
 
 
-def load_all_items():
-    """Load all items from Item.csv in game_data folder."""
-    path = "game_data/Item.csv"
-    log(f"STEP 1: opening file {path}")
+def sum_stats(build):
+    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
 
-    start_time = time.time()
+    for item in build:
+        total["crit"] += item.get("crit", 0)
+        total["dh"] += item.get("dh", 0)
+        total["det"] += item.get("det", 0)
+        total["sps"] += item.get("sps", 0)
 
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.reader(f)
-        headers = next(reader)
+    return total
 
-        # Detect columns
-        header_map = {}
-        for i, h in enumerate(headers):
-            h_norm = normalize_header(h)
-            if "name" in h_norm:
-                header_map["name"] = i
-            elif "itemlevel" in h_norm or "levelitem" in h_norm:
-                header_map["ilvl"] = i
-            elif "slot" in h_norm or "equipslotcategory" in h_norm:
-                header_map["slot"] = i
-            elif "criticalhit" in h_norm:
-                header_map["crit"] = i
-            elif "directhit" in h_norm:
-                header_map["dh"] = i
-            elif "determination" in h_norm:
-                header_map["det"] = i
-            elif "spellspeed" in h_norm:
-                header_map["sps"] = i
 
-        log(f"Columns detected: {header_map}")
+def attach_fake_materia(build):
+    """
+    Simple placeholder: adds dummy materia so UI doesn't break
+    """
+    for item in build:
+        item["materia_applied"] = [
+            {"stat": "crit", "value": 36},
+            {"stat": "crit", "value": 36},
+        ]
+    return build
 
-        items = []
-        last_log = time.time()
 
-        for idx, row in enumerate(reader):
+def solve(items, target_gcd, progress=None, top_n=3, foods=None):
+    """
+    MAIN SOLVER FUNCTION (what main.py expects)
+    """
+    log("Starting solver...")
 
-            # Watchdog logging
-            if idx % 5000 == 0:
-                now = time.time()
-                log(f"Loop alive at row {idx} (+{round(now-last_log,2)}s)")
-                last_log = now
+    if not items:
+        return []
 
-            try:
-                item = {
-                    "name": row[header_map.get("name", 0)],
-                    "ilvl": safe_int(row[header_map.get("ilvl", 0)]),
-                    "slot": row[header_map.get("slot", 0)],
-                    "crit": safe_int(row[header_map.get("crit")]) if "crit" in header_map else 0,
-                    "dh": safe_int(row[header_map.get("dh")]) if "dh" in header_map else 0,
-                    "det": safe_int(row[header_map.get("det")]) if "det" in header_map else 0,
-                    "sps": safe_int(row[header_map.get("sps")]) if "sps" in header_map else 0,
-                    "materia_slots": 2  # default, can adjust later
-                }
-                items.append(item)
-            except Exception as e:
-                log(f"Row {idx} ERROR: {e}")
-                continue
+    slot_groups = group_by_slot(items)
 
-    log(f"Total items parsed: {len(items)}")
-    log(f"TOTAL TIME: {round(time.time() - start_time,2)}s")
-    return items, max(item["ilvl"] for item in items) if items else 0
+    # Reduce explosion: keep top 8 ilvl per slot
+    for slot in slot_groups:
+        slot_groups[slot] = sorted(
+            slot_groups[slot],
+            key=lambda x: x["ilvl"],
+            reverse=True
+        )[:8]
+
+    builds = []
+    total_checked = 0
+
+    for idx, build in enumerate(combine_builds(slot_groups)):
+        total_checked += 1
+
+        if idx % 500 == 0 and progress:
+            progress(min(100, idx // 50))
+
+        stats = sum_stats(build)
+
+        # Apply foods
+        best_food = "None"
+        best_score = 0
+
+        if foods:
+            for food in foods:
+                boosted = apply_food(stats, food)
+                score = calculate_score(boosted, target_gcd)
+
+                if score > best_score:
+                    best_score = score
+                    best_food = food["name"]
+        else:
+            best_score = calculate_score(stats, target_gcd)
+
+        builds.append({
+            "build": attach_fake_materia(build.copy()),
+            "score": best_score,
+            "food": best_food
+        })
+
+    log(f"Total builds checked: {total_checked}")
+
+    # Sort + return top N
+    builds.sort(key=lambda x: x["score"], reverse=True)
+
+    return builds[:top_n]
