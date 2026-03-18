@@ -135,18 +135,16 @@ def load_items():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        next(reader)
+        # ✅ THIS IS THE FIX
         header = next(reader)
-        next(reader)
 
-        # 🔥 MUCH STRONGER MATCHING
-        name_i = find_column(header, ["name", "singular"])
-        ilvl_i = find_column(header, ["level{item}", "itemlevel"])
+        name_i = find_column(header, ["name"])
+        ilvl_i = find_column(header, ["levelitem"])
         slot_i = find_column(header, ["equipslotcategory"])
         job_i = find_column(header, ["classjobcategory"])
 
-        param_indices = [i for i, c in enumerate(header) if "baseparam" in c.lower()]
-        value_indices = [i for i, c in enumerate(header) if "baseparamvalue" in c.lower()]
+        param_indices = [i for i, c in enumerate(header) if "baseparam[" in c.lower()]
+        value_indices = [i for i, c in enumerate(header) if "baseparamvalue[" in c.lower()]
 
         log(f"Detected columns: name={name_i}, ilvl={ilvl_i}, slot={slot_i}")
 
@@ -174,7 +172,7 @@ def load_items():
                     "ilvl": int(row[ilvl_i]),
                     "slot": slot,
                     "stats": stats,
-                    "materia_slots": 2
+                    "materia_slots": int(row[find_column(header, ["materiaslotcount"])])
                 })
 
             except:
