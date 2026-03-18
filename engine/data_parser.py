@@ -13,45 +13,63 @@ def safe_int(val):
         return 0
 
 
-def normalize(h):
-    return h.lower().replace("_", "").replace(" ", "")
-
-
 def load_slot_map(path):
     log("Loading EquipSlotCategory...")
 
     slot_map = {}
 
     with open(path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
+        reader = csv.reader(f)
+
+        headers = next(reader)  # key,0,1,2...
+        names = next(reader)    # #,MainHand,OffHand,...
+        next(reader)            # types row
 
         for row in reader:
-            slot_id = row.get("Key")
+            if not row or len(row) < 2:
+                continue
 
-            # These flags exist in SaintCoinach export
-            if row.get("MainHand") == "True":
-                slot_map[slot_id] = "weapon"
-            elif row.get("Head") == "True":
-                slot_map[slot_id] = "head"
-            elif row.get("Body") == "True":
-                slot_map[slot_id] = "body"
-            elif row.get("Hands") == "True":
-                slot_map[slot_id] = "hands"
-            elif row.get("Legs") == "True":
-                slot_map[slot_id] = "legs"
-            elif row.get("Feet") == "True":
-                slot_map[slot_id] = "feet"
-            elif row.get("Ears") == "True":
-                slot_map[slot_id] = "earrings"
-            elif row.get("Neck") == "True":
-                slot_map[slot_id] = "necklace"
-            elif row.get("Wrists") == "True":
-                slot_map[slot_id] = "bracelet"
-            elif row.get("FingerL") == "True" or row.get("FingerR") == "True":
-                slot_map[slot_id] = "ring"
+            key = row[0]
+
+            # map column index → slot name
+            for i, val in enumerate(row[1:], start=1):
+                try:
+                    v = int(val)
+                except:
+                    continue
+
+                if v == 1:
+                    col_name = names[i]
+
+                    if col_name == "MainHand":
+                        slot_map[key] = "weapon"
+                    elif col_name == "Head":
+                        slot_map[key] = "head"
+                    elif col_name == "Body":
+                        slot_map[key] = "body"
+                    elif col_name == "Gloves":
+                        slot_map[key] = "hands"
+                    elif col_name == "Legs":
+                        slot_map[key] = "legs"
+                    elif col_name == "Feet":
+                        slot_map[key] = "feet"
+                    elif col_name == "Ears":
+                        slot_map[key] = "earrings"
+                    elif col_name == "Neck":
+                        slot_map[key] = "necklace"
+                    elif col_name == "Wrists":
+                        slot_map[key] = "bracelet"
+                    elif col_name in ("FingerL", "FingerR"):
+                        slot_map[key] = "ring"
+
+                    break  # first valid slot wins
 
     log(f"Loaded {len(slot_map)} slot mappings")
     return slot_map
+
+
+def normalize(h):
+    return h.lower().replace("_", "").replace(" ", "")
 
 
 def load_all_items(item_path):
@@ -112,7 +130,7 @@ def load_all_items(item_path):
                     elif "spellspeed" in param:
                         stats["sps"] += val
 
-                item = {
+                items.append({
                     "name": row[name_col],
                     "ilvl": safe_int(row[ilvl_col]),
                     "slot": real_slot,
@@ -121,13 +139,10 @@ def load_all_items(item_path):
                     "det": stats["det"],
                     "sps": stats["sps"],
                     "materia_slots": 2
-                }
-
-                items.append(item)
+                })
 
             except Exception as e:
                 log(f"Row {idx} ERROR: {e}")
-                continue
 
     log(f"Total items parsed: {len(items)}")
     log(f"TOTAL TIME: {round(time.time() - start_time,2)}s")
