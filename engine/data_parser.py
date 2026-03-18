@@ -2,13 +2,13 @@ import os
 from engine.csv_loader import load_csv, to_int
 from engine.logger import log
 
-DATA_PATH = "game_data"
-
-
 def load_all_items():
     log("Loading Item.csv...")
 
     rows = load_csv("Item.csv")
+
+    if not rows or len(rows) < 2:
+        raise Exception("Item.csv is empty or invalid")
 
     header = rows[0]
 
@@ -27,6 +27,9 @@ def load_all_items():
     dh_i = find_col(["directhit"])
     sps_i = find_col(["spellspeed"])
 
+    if name_i is None or ilvl_i is None or slot_i is None:
+        raise Exception("Failed to detect required columns in Item.csv")
+
     items = []
     max_ilvl = 0
 
@@ -41,10 +44,10 @@ def load_all_items():
                 "name": name,
                 "ilvl": ilvl,
                 "slot": slot,
-                "crit": to_int(r[crit_i]) if crit_i else 0,
-                "det": to_int(r[det_i]) if det_i else 0,
-                "dh": to_int(r[dh_i]) if dh_i else 0,
-                "sps": to_int(r[sps_i]) if sps_i else 0,
+                "crit": to_int(r[crit_i]) if crit_i is not None else 0,
+                "det": to_int(r[det_i]) if det_i is not None else 0,
+                "dh": to_int(r[dh_i]) if dh_i is not None else 0,
+                "sps": to_int(r[sps_i]) if sps_i is not None else 0,
                 "materia_slots": 2
             }
 
