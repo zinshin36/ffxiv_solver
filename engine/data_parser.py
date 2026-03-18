@@ -1,15 +1,11 @@
 import csv
-import time
+import os
+from engine.logger import log
+from engine.runtime_paths import GAME_DATA_DIR
 
 
-def log(msg):
-    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
-
-
-# =========================
-# LOAD BASE PARAM (STAT NAMES)
-# =========================
-def load_base_params(path):
+def load_base_params():
+    path = os.path.join(GAME_DATA_DIR, "BaseParam.csv")
     params = {}
 
     with open(path, encoding="utf-8") as f:
@@ -39,51 +35,41 @@ def load_base_params(path):
     return params
 
 
-# =========================
-# LOAD EQUIP SLOTS
-# =========================
-def load_equip_slots(path):
+def load_equip_slots():
+    path = os.path.join(GAME_DATA_DIR, "EquipSlotCategory.csv")
     slots = {}
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-        next(reader)
-        header = next(reader)
+
+        header = next(reader)  # real header
+        next(reader)           # skip type row
 
         for row in reader:
             try:
                 key = int(row[0])
 
-                # find which slot is active
                 for i in range(1, len(row)):
-                    val = row[i]
+                    if row[i] == "1":
+                        col = header[i].lower()
 
-                    if val == "1":
-                        slot_name = header[i].lower()
+                        mapping = {
+                            "mainhand": "weapon",
+                            "offhand": "offhand",
+                            "head": "head",
+                            "body": "body",
+                            "gloves": "hands",
+                            "legs": "legs",
+                            "feet": "feet",
+                            "ears": "earrings",
+                            "neck": "necklace",
+                            "wrists": "bracelet",
+                            "fingerl": "ring",
+                            "fingerr": "ring"
+                        }
 
-                        if slot_name == "mainhand":
-                            slots[key] = "weapon"
-                        elif slot_name == "offhand":
-                            slots[key] = "offhand"
-                        elif slot_name == "head":
-                            slots[key] = "head"
-                        elif slot_name == "body":
-                            slots[key] = "body"
-                        elif slot_name == "gloves":
-                            slots[key] = "hands"
-                        elif slot_name == "legs":
-                            slots[key] = "legs"
-                        elif slot_name == "feet":
-                            slots[key] = "feet"
-                        elif slot_name == "ears":
-                            slots[key] = "earrings"
-                        elif slot_name == "neck":
-                            slots[key] = "necklace"
-                        elif slot_name == "wrists":
-                            slots[key] = "bracelet"
-                        elif slot_name in ["fingerl", "fingerr"]:
-                            slots[key] = "ring"
-
+                        if col in mapping:
+                            slots[key] = mapping[col]
             except:
                 continue
 
@@ -91,19 +77,16 @@ def load_equip_slots(path):
     return slots
 
 
-# =========================
-# LOAD CLASS JOB CATEGORY
-# =========================
-def load_jobs(path):
+def load_jobs():
+    path = os.path.join(GAME_DATA_DIR, "ClassJobCategory.csv")
     jobs = {}
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
+
         header = next(reader)
-
         blm_index = header.index("BLM")
-
-        next(reader)  # types row
+        next(reader)
 
         for row in reader:
             try:
@@ -112,24 +95,24 @@ def load_jobs(path):
             except:
                 continue
 
-    log(f"Loaded job categories")
+    log("Loaded job categories")
     return jobs
 
 
-# =========================
-# LOAD ITEMS
-# =========================
 def load_items():
     log("Loading Item.csv...")
 
-    base_params = load_base_params("game_data/BaseParam.csv")
-    slots = load_equip_slots("game_data/EquipSlotCategory.csv")
-    jobs = load_jobs("game_data/ClassJobCategory.csv")
+    base_params = load_base_params()
+    slots = load_equip_slots()
+    jobs = load_jobs()
+
+    path = os.path.join(GAME_DATA_DIR, "Item.csv")
 
     items = []
 
-    with open("game_data/Item.csv", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
+
         header = next(reader)
         next(reader)
 
@@ -138,38 +121,25 @@ def load_items():
         slot_i = header.index("EquipSlotCategory")
         job_i = header.index("ClassJobCategory")
 
-        param_indices = []
-        value_indices = []
-
-        for i, col in enumerate(header):
-            if "BaseParam" in col:
-                param_indices.append(i)
-            if "BaseParamValue" in col:
-                value_indices.append(i)
+        param_indices = [i for i, c in enumerate(header) if "BaseParam" in c]
+        value_indices = [i for i, c in enumerate(header) if "BaseParamValue" in c]
 
         for row in reader:
             try:
-                job_cat = int(row[job_i])
+                if not jobs.get(int(row[job_i]), False):
+                    continue
 
-                if not jobs.get(job_cat, False):
-                    continue  # NOT BLM
-
-                slot_id = int(row[slot_i])
-                slot = slots.get(slot_id)
-
-                if not slot:
+                slot = slots.get(int(row[slot_i]))
+                if not slot or slot == "offhand":
                     continue
 
                 stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
 
                 for p_i, v_i in zip(param_indices, value_indices):
                     try:
-                        param = int(row[p_i])
-                        value = int(row[v_i])
-
-                        stat = base_params.get(param)
+                        stat = base_params.get(int(row[p_i]))
                         if stat:
-                            stats[stat] += value
+                            stats[stat] += int(row[v_i])
                     except:
                         continue
 
@@ -177,7 +147,8 @@ def load_items():
                     "name": row[name_i],
                     "ilvl": int(row[ilvl_i]),
                     "slot": slot,
-                    "stats": stats
+                    "stats": stats,
+                    "materia_slots": 2
                 })
 
             except:
