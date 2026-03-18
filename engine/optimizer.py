@@ -43,18 +43,17 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
 
     slot_groups = group_by_slot(items)
 
-    # 🔥 still prune per slot (not a cap, just sanity)
+    # Light pruning (NOT a cap, just sanity)
     for slot in slot_groups:
         slot_groups[slot] = sorted(
             slot_groups[slot],
             key=lambda x: x["ilvl"],
             reverse=True
-        )[:10]  # safe prune, not a global limit
+        )[:10]
 
     slots = list(slot_groups.keys())
     values = [slot_groups[s] for s in slots]
 
-    # ✅ TRUE TOTAL COMBINATIONS
     total_combinations = 1
     for v in values:
         total_combinations *= len(v)
@@ -67,12 +66,10 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
     for combo in itertools.product(*values):
         checked += 1
 
-        # ✅ Smooth progress updates
         if progress and total_combinations > 0:
             pct = int((checked / total_combinations) * 100)
             progress(pct)
 
-        # ✅ Visible heartbeat logging
         if checked % 1000 == 0:
             log(f"Progress: {checked}/{total_combinations} ({round((checked/total_combinations)*100,2)}%)")
 
