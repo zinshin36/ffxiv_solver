@@ -14,18 +14,6 @@ def group_by_slot(items):
     return slots
 
 
-def combine_builds(slot_groups):
-    """
-    Generate all combinations (1 item per slot)
-    WARNING: can explode if too many items per slot
-    """
-    keys = list(slot_groups.keys())
-    values = [slot_groups[k] for k in keys]
-
-    for combo in itertools.product(*values):
-        yield list(combo)
-
-
 def sum_stats(build):
     total = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
 
@@ -39,9 +27,6 @@ def sum_stats(build):
 
 
 def attach_fake_materia(build):
-    """
-    Simple placeholder: adds dummy materia so UI doesn't break
-    """
     for item in build:
         item["materia_applied"] = [
             {"stat": "crit", "value": 36},
@@ -51,9 +36,6 @@ def attach_fake_materia(build):
 
 
 def solve(items, target_gcd, progress=None, top_n=3, foods=None):
-    """
-    MAIN SOLVER FUNCTION (what main.py expects)
-    """
     log("Starting solver...")
 
     if not items:
@@ -61,26 +43,42 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
 
     slot_groups = group_by_slot(items)
 
-    # Reduce explosion: keep top 8 ilvl per slot
+    # 🔥 still prune per slot (not a cap, just sanity)
     for slot in slot_groups:
         slot_groups[slot] = sorted(
             slot_groups[slot],
             key=lambda x: x["ilvl"],
             reverse=True
-        )[:8]
+        )[:10]  # safe prune, not a global limit
+
+    slots = list(slot_groups.keys())
+    values = [slot_groups[s] for s in slots]
+
+    # ✅ TRUE TOTAL COMBINATIONS
+    total_combinations = 1
+    for v in values:
+        total_combinations *= len(v)
+
+    log(f"Total combinations to evaluate: {total_combinations}")
 
     builds = []
-    total_checked = 0
+    checked = 0
 
-    for idx, build in enumerate(combine_builds(slot_groups)):
-        total_checked += 1
+    for combo in itertools.product(*values):
+        checked += 1
 
-        if idx % 500 == 0 and progress:
-            progress(min(100, idx // 50))
+        # ✅ Smooth progress updates
+        if progress and total_combinations > 0:
+            pct = int((checked / total_combinations) * 100)
+            progress(pct)
 
+        # ✅ Visible heartbeat logging
+        if checked % 1000 == 0:
+            log(f"Progress: {checked}/{total_combinations} ({round((checked/total_combinations)*100,2)}%)")
+
+        build = list(combo)
         stats = sum_stats(build)
 
-        # Apply foods
         best_food = "None"
         best_score = 0
 
@@ -101,9 +99,8 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
             "food": best_food
         })
 
-    log(f"Total builds checked: {total_checked}")
+    log(f"Finished. Total builds checked: {checked}")
 
-    # Sort + return top N
     builds.sort(key=lambda x: x["score"], reverse=True)
 
     return builds[:top_n]
