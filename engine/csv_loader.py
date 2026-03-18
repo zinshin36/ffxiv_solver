@@ -1,8 +1,9 @@
 import csv
 import os
 from engine.logger import log
+from engine.runtime_paths import GAME_DATA_DIR
 
-DATA_PATH = "game_data"
+DATA_PATH = GAME_DATA_DIR
 
 
 def load_csv(filename):
@@ -10,7 +11,7 @@ def load_csv(filename):
     path = os.path.join(DATA_PATH, filename)
 
     if not os.path.exists(path):
-        raise Exception(f"{filename} not found in game_data folder")
+        raise Exception(f"{filename} not found in game_data folder ({path})")
 
     rows = []
 
