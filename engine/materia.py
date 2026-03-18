@@ -2,9 +2,12 @@ def apply_materia(item):
 
     slots = item.get("materia_slots", 2)
 
-    # simple priority: crit > dh > det > sps
-    for _ in range(slots):
+    melds = []
 
-        item["crit"] += 36  # simulate high-grade materia
+    for _ in range(slots):
+        item["crit"] += 36
+        melds.append("Crit +36")
+
+    item["melds"] = melds
 
     return item
