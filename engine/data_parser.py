@@ -1,5 +1,6 @@
 import csv
 import time
+import os
 from engine.logger import log
 
 
@@ -16,24 +17,60 @@ def normalize(h):
     return h.lower().replace("_", "").replace(" ", "")
 
 
-def load_all_items(path):
-    log(f"STEP 1: opening file {path}")
+def load_slot_map(path):
+    log("Loading EquipSlotCategory...")
+
+    slot_map = {}
+
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            slot_id = row.get("Key")
+
+            # These flags exist in SaintCoinach export
+            if row.get("MainHand") == "True":
+                slot_map[slot_id] = "weapon"
+            elif row.get("Head") == "True":
+                slot_map[slot_id] = "head"
+            elif row.get("Body") == "True":
+                slot_map[slot_id] = "body"
+            elif row.get("Hands") == "True":
+                slot_map[slot_id] = "hands"
+            elif row.get("Legs") == "True":
+                slot_map[slot_id] = "legs"
+            elif row.get("Feet") == "True":
+                slot_map[slot_id] = "feet"
+            elif row.get("Ears") == "True":
+                slot_map[slot_id] = "earrings"
+            elif row.get("Neck") == "True":
+                slot_map[slot_id] = "necklace"
+            elif row.get("Wrists") == "True":
+                slot_map[slot_id] = "bracelet"
+            elif row.get("FingerL") == "True" or row.get("FingerR") == "True":
+                slot_map[slot_id] = "ring"
+
+    log(f"Loaded {len(slot_map)} slot mappings")
+    return slot_map
+
+
+def load_all_items(item_path):
+    log(f"STEP 1: opening file {item_path}")
+
+    slot_map = load_slot_map(os.path.join("game_data", "EquipSlotCategory.csv"))
 
     start_time = time.time()
 
-    with open(path, encoding="utf-8-sig", newline="") as f:
+    with open(item_path, encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         headers = next(reader)
 
-        # Normalize headers
         norm_headers = [normalize(h) for h in headers]
 
-        # Detect base columns
-        name_col = next((i for i, h in enumerate(norm_headers) if "name" in h), 0)
-        ilvl_col = next((i for i, h in enumerate(norm_headers) if "itemlevel" in h or "levelitem" in h), 0)
-        slot_col = next((i for i, h in enumerate(norm_headers) if "equipslotcategory" in h or "slot" in h), 0)
+        name_col = next(i for i, h in enumerate(norm_headers) if "name" in h)
+        ilvl_col = next(i for i, h in enumerate(norm_headers) if "itemlevel" in h)
+        slot_col = next(i for i, h in enumerate(norm_headers) if "equipslotcategory" in h)
 
-        # Detect BaseParam columns (VERY IMPORTANT)
         baseparam_cols = []
         basevalue_cols = []
 
@@ -42,8 +79,6 @@ def load_all_items(path):
                 baseparam_cols.append(i)
             elif "baseparamvalue" in h:
                 basevalue_cols.append(i)
-
-        log(f"Detected {len(baseparam_cols)} BaseParam columns")
 
         items = []
         last_log = time.time()
@@ -56,11 +91,15 @@ def load_all_items(path):
                 last_log = now
 
             try:
+                slot_id = row[slot_col]
+                real_slot = slot_map.get(slot_id)
+
+                if not real_slot:
+                    continue
+
                 stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
 
-                # Parse BaseParams
                 for p_col, v_col in zip(baseparam_cols, basevalue_cols):
-
                     param = normalize(row[p_col]) if p_col < len(row) else ""
                     val = safe_int(row[v_col]) if v_col < len(row) else 0
 
@@ -76,7 +115,7 @@ def load_all_items(path):
                 item = {
                     "name": row[name_col],
                     "ilvl": safe_int(row[ilvl_col]),
-                    "slot": row[slot_col],
+                    "slot": real_slot,
                     "crit": stats["crit"],
                     "dh": stats["dh"],
                     "det": stats["det"],
