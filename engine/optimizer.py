@@ -36,6 +36,10 @@ def group_slots(items):
         if s:
             slots[s].append(item)
 
+    # 🔥 DEBUG OUTPUT
+    for s in VALID_SLOTS:
+        log(f"{s}: {len(slots[s])} items")
+
     return slots
 
 
@@ -60,6 +64,12 @@ def solve(items, gcd_target):
         "feet","earrings","necklace","bracelet","ring","ring"
     ]
 
+    # 🔥 CHECK FOR MISSING SLOTS
+    for s in order:
+        if not slots[s]:
+            log(f"❌ MISSING SLOT: {s}")
+            return []
+
     slot_items = [slots[s] for s in order]
 
     best_sets = []
@@ -69,9 +79,7 @@ def solve(items, gcd_target):
         if i == len(slot_items):
 
             score = calculate_score(stats, gcd_target)
-
             best_sets.append((score, build.copy()))
-
             return
 
         for base in slot_items[i]:
