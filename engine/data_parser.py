@@ -2,95 +2,81 @@ import csv
 import time
 from engine.logger import log
 
+
 def safe_int(val):
+    """Convert value to int, return 0 if fails."""
     try:
-        return int(val)
+        if val is None or val == "":
+            return 0
+        return int(float(val))
     except:
         return 0
 
 
-def parse_items(path="game_data/Item.csv"):
-    """
-    Parses Item.csv from SaintCoinach/Godbert
-    Only minimal work here; returns all items as dicts
-    """
-    log("DATA_PARSER IMPORTED")
-    start_time = time.time()
-    items = []
-
-    if not path or not path.endswith(".csv"):
-        log("Invalid path for items")
-        return []
-
-    log(f"STEP 1: opening file {path}")
-    try:
-        f = open(path, encoding="utf-8-sig", newline="")
-    except Exception as e:
-        log(f"ERROR opening file: {e}")
-        return []
-
-    reader = csv.reader(f)
-    try:
-        headers = next(reader)
-    except Exception as e:
-        log(f"ERROR reading headers: {e}")
-        return []
-
-    # Detect columns
-    header_norm = [h.lower() for h in headers]
-    def find_idx(keys):
-        for i, h in enumerate(header_norm):
-            if any(k in h for k in keys):
-                return i
-        return None
-
-    name_i = find_idx(["name"])
-    ilvl_i = find_idx(["levelitem", "itemlevel"])
-    slot_i = find_idx(["equipslotcategory"])
-    stats_i = {
-        "crit": find_idx(["criticalhit"]),
-        "dh": find_idx(["directhit"]),
-        "det": find_idx(["determination"]),
-        "sps": find_idx(["spellspeed"])
-    }
-
-    log(f"Columns detected: name={name_i}, ilvl={ilvl_i}, slot={slot_i}, stats={stats_i}")
-
-    last_log = time.time()
-    for i, row in enumerate(reader):
-        if i % 5000 == 0:
-            log(f"Loop alive at row {i} (+{round(time.time() - last_log, 2)}s)")
-            last_log = time.time()
-        try:
-            name = row[name_i] if name_i is not None else "Unknown"
-            ilvl = safe_int(row[ilvl_i]) if ilvl_i is not None else 0
-            slot = row[slot_i] if slot_i is not None else None
-            stats = {}
-            for k, idx in stats_i.items():
-                stats[k] = safe_int(row[idx]) if idx is not None else 0
-
-            items.append({
-                "name": name,
-                "ilvl": ilvl,
-                "slot": slot,
-                "stats": stats,
-                "materia_slots": 2  # default, can be updated later
-            })
-        except Exception as e:
-            log(f"Row {i} ERROR: {e}")
-            continue
-
-    f.close()
-    log(f"Total items parsed: {len(items)}")
-    log(f"TOTAL TIME: {round(time.time() - start_time, 2)}s")
-    return items
+def normalize_header(h):
+    """Lowercase and remove spaces/underscores for matching."""
+    return h.lower().replace("_", "").replace(" ", "")
 
 
 def load_all_items():
-    # path can be dynamic if needed
-    items = parse_items()
-    if not items:
-        log("No items loaded")
-        return [], 0
-    max_ilvl = max(i["ilvl"] for i in items)
-    return items, max_ilvl
+    """Load all items from Item.csv in game_data folder."""
+    path = "game_data/Item.csv"
+    log(f"STEP 1: opening file {path}")
+
+    start_time = time.time()
+
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+
+        # Detect columns
+        header_map = {}
+        for i, h in enumerate(headers):
+            h_norm = normalize_header(h)
+            if "name" in h_norm:
+                header_map["name"] = i
+            elif "itemlevel" in h_norm or "levelitem" in h_norm:
+                header_map["ilvl"] = i
+            elif "slot" in h_norm or "equipslotcategory" in h_norm:
+                header_map["slot"] = i
+            elif "criticalhit" in h_norm:
+                header_map["crit"] = i
+            elif "directhit" in h_norm:
+                header_map["dh"] = i
+            elif "determination" in h_norm:
+                header_map["det"] = i
+            elif "spellspeed" in h_norm:
+                header_map["sps"] = i
+
+        log(f"Columns detected: {header_map}")
+
+        items = []
+        last_log = time.time()
+
+        for idx, row in enumerate(reader):
+
+            # Watchdog logging
+            if idx % 5000 == 0:
+                now = time.time()
+                log(f"Loop alive at row {idx} (+{round(now-last_log,2)}s)")
+                last_log = now
+
+            try:
+                item = {
+                    "name": row[header_map.get("name", 0)],
+                    "ilvl": safe_int(row[header_map.get("ilvl", 0)]),
+                    "slot": row[header_map.get("slot", 0)],
+                    "crit": safe_int(row[header_map.get("crit")]) if "crit" in header_map else 0,
+                    "dh": safe_int(row[header_map.get("dh")]) if "dh" in header_map else 0,
+                    "det": safe_int(row[header_map.get("det")]) if "det" in header_map else 0,
+                    "sps": safe_int(row[header_map.get("sps")]) if "sps" in header_map else 0,
+                    "materia_slots": 2  # default, can adjust later
+                }
+                items.append(item)
+            except Exception as e:
+                log(f"Row {idx} ERROR: {e}")
+                continue
+
+    log(f"Total items parsed: {len(items)}")
+    log(f"TOTAL TIME: {round(time.time() - start_time,2)}s")
+    return items, max(item["ilvl"] for item in items) if items else 0
