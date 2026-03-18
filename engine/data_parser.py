@@ -4,6 +4,15 @@ from engine.logger import log
 from engine.runtime_paths import GAME_DATA_DIR
 
 
+def find_column(header, keywords):
+    for i, col in enumerate(header):
+        name = col.lower()
+        for key in keywords:
+            if key in name:
+                return i
+    raise Exception(f"Column not found for {keywords}")
+
+
 def load_base_params():
     path = os.path.join(GAME_DATA_DIR, "BaseParam.csv")
     params = {}
@@ -11,14 +20,16 @@ def load_base_params():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        next(reader)  # key row
-        next(reader)  # header row
-        next(reader)  # type row
+        next(reader)
+        header = next(reader)
+        next(reader)
+
+        name_i = find_column(header, ["name"])
 
         for row in reader:
             try:
                 key = int(row[0])
-                name = row[2].lower()
+                name = row[name_i].lower()
 
                 if "critical" in name:
                     params[key] = "crit"
@@ -44,9 +55,9 @@ def load_equip_slots():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        next(reader)  # key row
-        header = next(reader)  # REAL header
-        next(reader)  # type row
+        next(reader)
+        header = next(reader)
+        next(reader)
 
         for row in reader:
             try:
@@ -87,24 +98,21 @@ def load_jobs():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        next(reader)              # key row
-        header = next(reader)    # REAL header (THIS HAS BLM)
-        next(reader)              # type row
+        next(reader)
+        header = next(reader)
+        next(reader)
 
-        # NOW this works
-        blm_index = header.index("BLM")
-        log(f"BLM column index: {blm_index}")
+        blm_index = find_column(header, ["blm", "black"])
+        log(f"BLM column: {header[blm_index]}")
 
         for row in reader:
             try:
                 key = int(row[0])
-                val = row[blm_index].strip()
-
-                jobs[key] = val in ["True", "true", "1"]
+                val = row[blm_index].strip().lower()
+                jobs[key] = val in ["true", "1"]
             except:
                 continue
 
-    log("Loaded job categories")
     return jobs
 
 
@@ -122,17 +130,19 @@ def load_items():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        next(reader)              # key row
-        header = next(reader)    # REAL header
-        next(reader)              # type row
+        next(reader)
+        header = next(reader)
+        next(reader)
 
-        name_i = header.index("Name")
-        ilvl_i = header.index("Level{Item}")
-        slot_i = header.index("EquipSlotCategory")
-        job_i = header.index("ClassJobCategory")
+        name_i = find_column(header, ["name"])
+        ilvl_i = find_column(header, ["level{item}", "itemlevel"])
+        slot_i = find_column(header, ["equipslotcategory"])
+        job_i = find_column(header, ["classjobcategory"])
 
-        param_indices = [i for i, c in enumerate(header) if "BaseParam" in c]
-        value_indices = [i for i, c in enumerate(header) if "BaseParamValue" in c]
+        param_indices = [i for i, c in enumerate(header) if "baseparam" in c.lower()]
+        value_indices = [i for i, c in enumerate(header) if "baseparamvalue" in c.lower()]
+
+        log(f"Detected columns: name={name_i}, ilvl={ilvl_i}, slot={slot_i}")
 
         for row in reader:
             try:
