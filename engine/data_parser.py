@@ -42,8 +42,8 @@ def load_equip_slots():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        header = next(reader)  # real header
-        next(reader)           # skip type row
+        header = next(reader)
+        next(reader)
 
         for row in reader:
             try:
@@ -77,6 +77,19 @@ def load_equip_slots():
     return slots
 
 
+def detect_blm_column(header):
+    """
+    Try to find BLM column dynamically
+    """
+    for i, col in enumerate(header):
+        name = col.lower()
+
+        if "black" in name or "blm" in name:
+            return i
+
+    raise Exception("Could not find Black Mage column in ClassJobCategory.csv")
+
+
 def load_jobs():
     path = os.path.join(GAME_DATA_DIR, "ClassJobCategory.csv")
     jobs = {}
@@ -85,13 +98,19 @@ def load_jobs():
         reader = csv.reader(f)
 
         header = next(reader)
-        blm_index = header.index("BLM")
+
+        blm_index = detect_blm_column(header)
+        log(f"Detected BLM column: {header[blm_index]}")
+
         next(reader)
 
         for row in reader:
             try:
                 key = int(row[0])
-                jobs[key] = row[blm_index] == "True"
+
+                val = row[blm_index].strip().lower()
+
+                jobs[key] = val in ["true", "1"]
             except:
                 continue
 
