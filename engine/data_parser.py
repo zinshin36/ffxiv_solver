@@ -12,15 +12,11 @@ def safe_int(val):
         return 0
 
 
-def normalize_header(h):
+def normalize(h):
     return h.lower().replace("_", "").replace(" ", "")
 
 
 def load_all_items(path):
-    """
-    Load items from Item.csv
-    RETURNS: list of item dicts (NOT tuple)
-    """
     log(f"STEP 1: opening file {path}")
 
     start_time = time.time()
@@ -29,27 +25,25 @@ def load_all_items(path):
         reader = csv.reader(f)
         headers = next(reader)
 
-        header_map = {}
+        # Normalize headers
+        norm_headers = [normalize(h) for h in headers]
 
-        for i, h in enumerate(headers):
-            h_norm = normalize_header(h)
+        # Detect base columns
+        name_col = next((i for i, h in enumerate(norm_headers) if "name" in h), 0)
+        ilvl_col = next((i for i, h in enumerate(norm_headers) if "itemlevel" in h or "levelitem" in h), 0)
+        slot_col = next((i for i, h in enumerate(norm_headers) if "equipslotcategory" in h or "slot" in h), 0)
 
-            if "name" in h_norm:
-                header_map["name"] = i
-            elif "itemlevel" in h_norm or "levelitem" in h_norm:
-                header_map["ilvl"] = i
-            elif "slot" in h_norm or "equipslotcategory" in h_norm:
-                header_map["slot"] = i
-            elif "criticalhit" in h_norm:
-                header_map["crit"] = i
-            elif "directhit" in h_norm:
-                header_map["dh"] = i
-            elif "determination" in h_norm:
-                header_map["det"] = i
-            elif "spellspeed" in h_norm:
-                header_map["sps"] = i
+        # Detect BaseParam columns (VERY IMPORTANT)
+        baseparam_cols = []
+        basevalue_cols = []
 
-        log(f"Columns detected: {header_map}")
+        for i, h in enumerate(norm_headers):
+            if "baseparam" in h and "value" not in h:
+                baseparam_cols.append(i)
+            elif "baseparamvalue" in h:
+                basevalue_cols.append(i)
+
+        log(f"Detected {len(baseparam_cols)} BaseParam columns")
 
         items = []
         last_log = time.time()
@@ -62,14 +56,31 @@ def load_all_items(path):
                 last_log = now
 
             try:
+                stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
+
+                # Parse BaseParams
+                for p_col, v_col in zip(baseparam_cols, basevalue_cols):
+
+                    param = normalize(row[p_col]) if p_col < len(row) else ""
+                    val = safe_int(row[v_col]) if v_col < len(row) else 0
+
+                    if "criticalhit" in param:
+                        stats["crit"] += val
+                    elif "directhit" in param:
+                        stats["dh"] += val
+                    elif "determination" in param:
+                        stats["det"] += val
+                    elif "spellspeed" in param:
+                        stats["sps"] += val
+
                 item = {
-                    "name": row[header_map.get("name", 0)],
-                    "ilvl": safe_int(row[header_map.get("ilvl", 0)]),
-                    "slot": row[header_map.get("slot", 0)],
-                    "crit": safe_int(row[header_map["crit"]]) if "crit" in header_map else 0,
-                    "dh": safe_int(row[header_map["dh"]]) if "dh" in header_map else 0,
-                    "det": safe_int(row[header_map["det"]]) if "det" in header_map else 0,
-                    "sps": safe_int(row[header_map["sps"]]) if "sps" in header_map else 0,
+                    "name": row[name_col],
+                    "ilvl": safe_int(row[ilvl_col]),
+                    "slot": row[slot_col],
+                    "crit": stats["crit"],
+                    "dh": stats["dh"],
+                    "det": stats["det"],
+                    "sps": stats["sps"],
                     "materia_slots": 2
                 }
 
