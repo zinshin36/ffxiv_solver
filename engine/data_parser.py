@@ -11,9 +11,9 @@ def find_column(header, keywords):
             if key in name:
                 return i
 
-    log("HEADER DUMP:")
+    print("HEADER DUMP (CRITICAL):")
     for i, col in enumerate(header):
-        log(f"{i}: {col}")
+        print(i, col)
 
     raise Exception(f"Column not found for {keywords}")
 
@@ -135,13 +135,14 @@ def load_items():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        # ✅ THIS IS THE FIX
         header = next(reader)
 
+        # ✅ PRECOMPUTE EVERYTHING ONCE
         name_i = find_column(header, ["name"])
         ilvl_i = find_column(header, ["levelitem"])
         slot_i = find_column(header, ["equipslotcategory"])
         job_i = find_column(header, ["classjobcategory"])
+        materia_i = find_column(header, ["materiaslotcount"])
 
         param_indices = [i for i, c in enumerate(header) if "baseparam[" in c.lower()]
         value_indices = [i for i, c in enumerate(header) if "baseparamvalue[" in c.lower()]
@@ -172,7 +173,7 @@ def load_items():
                     "ilvl": int(row[ilvl_i]),
                     "slot": slot,
                     "stats": stats,
-                    "materia_slots": int(row[find_column(header, ["materiaslotcount"])])
+                    "materia_slots": int(row[materia_i])
                 })
 
             except:
