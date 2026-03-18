@@ -10,8 +10,10 @@ def load_base_params():
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-        next(reader)
-        next(reader)
+
+        next(reader)  # key row
+        next(reader)  # header row
+        next(reader)  # type row
 
         for row in reader:
             try:
@@ -42,8 +44,9 @@ def load_equip_slots():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        header = next(reader)
-        next(reader)
+        next(reader)  # key row
+        header = next(reader)  # REAL header
+        next(reader)  # type row
 
         for row in reader:
             try:
@@ -77,19 +80,6 @@ def load_equip_slots():
     return slots
 
 
-def detect_blm_column(header):
-    """
-    Try to find BLM column dynamically
-    """
-    for i, col in enumerate(header):
-        name = col.lower()
-
-        if "black" in name or "blm" in name:
-            return i
-
-    raise Exception("Could not find Black Mage column in ClassJobCategory.csv")
-
-
 def load_jobs():
     path = os.path.join(GAME_DATA_DIR, "ClassJobCategory.csv")
     jobs = {}
@@ -97,20 +87,20 @@ def load_jobs():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        header = next(reader)
+        next(reader)              # key row
+        header = next(reader)    # REAL header (THIS HAS BLM)
+        next(reader)              # type row
 
-        blm_index = detect_blm_column(header)
-        log(f"Detected BLM column: {header[blm_index]}")
-
-        next(reader)
+        # NOW this works
+        blm_index = header.index("BLM")
+        log(f"BLM column index: {blm_index}")
 
         for row in reader:
             try:
                 key = int(row[0])
+                val = row[blm_index].strip()
 
-                val = row[blm_index].strip().lower()
-
-                jobs[key] = val in ["true", "1"]
+                jobs[key] = val in ["True", "true", "1"]
             except:
                 continue
 
@@ -132,8 +122,9 @@ def load_items():
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
 
-        header = next(reader)
-        next(reader)
+        next(reader)              # key row
+        header = next(reader)    # REAL header
+        next(reader)              # type row
 
         name_i = header.index("Name")
         ilvl_i = header.index("Level{Item}")
