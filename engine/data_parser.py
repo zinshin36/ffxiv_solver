@@ -1,150 +1,187 @@
 import csv
 import time
-import os
-from engine.logger import log
 
 
-def safe_int(val):
-    try:
-        if val is None or val == "":
-            return 0
-        return int(float(val))
-    except:
-        return 0
+def log(msg):
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 
-def load_slot_map(path):
-    log("Loading EquipSlotCategory...")
+# =========================
+# LOAD BASE PARAM (STAT NAMES)
+# =========================
+def load_base_params(path):
+    params = {}
 
-    slot_map = {}
-
-    with open(path, encoding="utf-8-sig", newline="") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-
-        headers = next(reader)  # key,0,1,2...
-        names = next(reader)    # #,MainHand,OffHand,...
-        next(reader)            # types row
+        next(reader)
+        next(reader)
 
         for row in reader:
-            if not row or len(row) < 2:
+            try:
+                key = int(row[0])
+                name = row[2].lower()
+
+                if "critical" in name:
+                    params[key] = "crit"
+                elif "direct hit" in name:
+                    params[key] = "dh"
+                elif "determination" in name:
+                    params[key] = "det"
+                elif "spell speed" in name:
+                    params[key] = "sps"
+                elif "intelligence" in name:
+                    params[key] = "int"
+            except:
                 continue
 
-            key = row[0]
-
-            # map column index → slot name
-            for i, val in enumerate(row[1:], start=1):
-                try:
-                    v = int(val)
-                except:
-                    continue
-
-                if v == 1:
-                    col_name = names[i]
-
-                    if col_name == "MainHand":
-                        slot_map[key] = "weapon"
-                    elif col_name == "Head":
-                        slot_map[key] = "head"
-                    elif col_name == "Body":
-                        slot_map[key] = "body"
-                    elif col_name == "Gloves":
-                        slot_map[key] = "hands"
-                    elif col_name == "Legs":
-                        slot_map[key] = "legs"
-                    elif col_name == "Feet":
-                        slot_map[key] = "feet"
-                    elif col_name == "Ears":
-                        slot_map[key] = "earrings"
-                    elif col_name == "Neck":
-                        slot_map[key] = "necklace"
-                    elif col_name == "Wrists":
-                        slot_map[key] = "bracelet"
-                    elif col_name in ("FingerL", "FingerR"):
-                        slot_map[key] = "ring"
-
-                    break  # first valid slot wins
-
-    log(f"Loaded {len(slot_map)} slot mappings")
-    return slot_map
+    log(f"Loaded {len(params)} base params")
+    return params
 
 
-def normalize(h):
-    return h.lower().replace("_", "").replace(" ", "")
+# =========================
+# LOAD EQUIP SLOTS
+# =========================
+def load_equip_slots(path):
+    slots = {}
 
-
-def load_all_items(item_path):
-    log(f"STEP 1: opening file {item_path}")
-
-    slot_map = load_slot_map(os.path.join("game_data", "EquipSlotCategory.csv"))
-
-    start_time = time.time()
-
-    with open(item_path, encoding="utf-8-sig", newline="") as f:
+    with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-        headers = next(reader)
+        next(reader)
+        header = next(reader)
 
-        norm_headers = [normalize(h) for h in headers]
-
-        name_col = next(i for i, h in enumerate(norm_headers) if "name" in h)
-        ilvl_col = next(i for i, h in enumerate(norm_headers) if "itemlevel" in h)
-        slot_col = next(i for i, h in enumerate(norm_headers) if "equipslotcategory" in h)
-
-        baseparam_cols = []
-        basevalue_cols = []
-
-        for i, h in enumerate(norm_headers):
-            if "baseparam" in h and "value" not in h:
-                baseparam_cols.append(i)
-            elif "baseparamvalue" in h:
-                basevalue_cols.append(i)
-
-        items = []
-        last_log = time.time()
-
-        for idx, row in enumerate(reader):
-
-            if idx % 5000 == 0:
-                now = time.time()
-                log(f"Loop alive at row {idx} (+{round(now-last_log,2)}s)")
-                last_log = now
-
+        for row in reader:
             try:
-                slot_id = row[slot_col]
-                real_slot = slot_map.get(slot_id)
+                key = int(row[0])
 
-                if not real_slot:
+                # find which slot is active
+                for i in range(1, len(row)):
+                    val = row[i]
+
+                    if val == "1":
+                        slot_name = header[i].lower()
+
+                        if slot_name == "mainhand":
+                            slots[key] = "weapon"
+                        elif slot_name == "offhand":
+                            slots[key] = "offhand"
+                        elif slot_name == "head":
+                            slots[key] = "head"
+                        elif slot_name == "body":
+                            slots[key] = "body"
+                        elif slot_name == "gloves":
+                            slots[key] = "hands"
+                        elif slot_name == "legs":
+                            slots[key] = "legs"
+                        elif slot_name == "feet":
+                            slots[key] = "feet"
+                        elif slot_name == "ears":
+                            slots[key] = "earrings"
+                        elif slot_name == "neck":
+                            slots[key] = "necklace"
+                        elif slot_name == "wrists":
+                            slots[key] = "bracelet"
+                        elif slot_name in ["fingerl", "fingerr"]:
+                            slots[key] = "ring"
+
+            except:
+                continue
+
+    log(f"Loaded {len(slots)} slot mappings")
+    return slots
+
+
+# =========================
+# LOAD CLASS JOB CATEGORY
+# =========================
+def load_jobs(path):
+    jobs = {}
+
+    with open(path, encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+
+        blm_index = header.index("BLM")
+
+        next(reader)  # types row
+
+        for row in reader:
+            try:
+                key = int(row[0])
+                jobs[key] = row[blm_index] == "True"
+            except:
+                continue
+
+    log(f"Loaded job categories")
+    return jobs
+
+
+# =========================
+# LOAD ITEMS
+# =========================
+def load_items():
+    log("Loading Item.csv...")
+
+    base_params = load_base_params("game_data/BaseParam.csv")
+    slots = load_equip_slots("game_data/EquipSlotCategory.csv")
+    jobs = load_jobs("game_data/ClassJobCategory.csv")
+
+    items = []
+
+    with open("game_data/Item.csv", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        next(reader)
+
+        name_i = header.index("Name")
+        ilvl_i = header.index("Level{Item}")
+        slot_i = header.index("EquipSlotCategory")
+        job_i = header.index("ClassJobCategory")
+
+        param_indices = []
+        value_indices = []
+
+        for i, col in enumerate(header):
+            if "BaseParam" in col:
+                param_indices.append(i)
+            if "BaseParamValue" in col:
+                value_indices.append(i)
+
+        for row in reader:
+            try:
+                job_cat = int(row[job_i])
+
+                if not jobs.get(job_cat, False):
+                    continue  # NOT BLM
+
+                slot_id = int(row[slot_i])
+                slot = slots.get(slot_id)
+
+                if not slot:
                     continue
 
-                stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0}
+                stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
 
-                for p_col, v_col in zip(baseparam_cols, basevalue_cols):
-                    param = normalize(row[p_col]) if p_col < len(row) else ""
-                    val = safe_int(row[v_col]) if v_col < len(row) else 0
+                for p_i, v_i in zip(param_indices, value_indices):
+                    try:
+                        param = int(row[p_i])
+                        value = int(row[v_i])
 
-                    if "criticalhit" in param:
-                        stats["crit"] += val
-                    elif "directhit" in param:
-                        stats["dh"] += val
-                    elif "determination" in param:
-                        stats["det"] += val
-                    elif "spellspeed" in param:
-                        stats["sps"] += val
+                        stat = base_params.get(param)
+                        if stat:
+                            stats[stat] += value
+                    except:
+                        continue
 
                 items.append({
-                    "name": row[name_col],
-                    "ilvl": safe_int(row[ilvl_col]),
-                    "slot": real_slot,
-                    "crit": stats["crit"],
-                    "dh": stats["dh"],
-                    "det": stats["det"],
-                    "sps": stats["sps"],
-                    "materia_slots": 2
+                    "name": row[name_i],
+                    "ilvl": int(row[ilvl_i]),
+                    "slot": slot,
+                    "stats": stats
                 })
 
-            except Exception as e:
-                log(f"Row {idx} ERROR: {e}")
+            except:
+                continue
 
-    log(f"Total items parsed: {len(items)}")
-    log(f"TOTAL TIME: {round(time.time() - start_time,2)}s")
-
+    log(f"Loaded {len(items)} BLM items")
     return items
