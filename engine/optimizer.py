@@ -3,6 +3,8 @@ from collections import defaultdict
 from engine.logger import log
 from engine.dps_model import compute_dps
 from engine.food import apply_food
+from engine.materia_solver import optimize_materia
+from engine.gcd import compute_gcd
 
 
 SLOTS = [
@@ -21,7 +23,6 @@ def group_items(items):
         else:
             slots[item["slot"]].append(item)
 
-    # remove empty slots
     return {k: v for k, v in slots.items() if v}
 
 
@@ -37,29 +38,17 @@ def sum_stats(build):
     return total
 
 
-def apply_materia(item):
-    melds = []
-
-    for _ in range(item.get("materia_slots", 2)):
-        item["crit"] += 36
-        melds.append({"stat": "crit", "value": 36})
-
-    item["materia_applied"] = melds
-    return item
-
-
 def solve(items, target_gcd, progress=None, top_n=3, foods=None):
-    log("Starting FULL solver...")
+    log("Starting FINAL solver (materia + speed tiers)...")
 
     slot_groups = group_items(items)
 
-    # prune slightly (still large)
     for slot in slot_groups:
         slot_groups[slot] = sorted(
             slot_groups[slot],
             key=lambda x: x["ilvl"],
             reverse=True
-        )[:15]
+        )[:12]
 
     keys = list(slot_groups.keys())
     values = [slot_groups[k] for k in keys]
@@ -79,34 +68,45 @@ def solve(items, target_gcd, progress=None, top_n=3, foods=None):
         if progress:
             progress(int((checked / total) * 100))
 
-        if checked % 5000 == 0:
+        if checked % 3000 == 0:
             log(f"{checked}/{total} ({round((checked/total)*100,2)}%)")
 
-        build = []
+        build = [dict(item) for item in combo]
 
-        for item in combo:
-            build.append(apply_materia(dict(item)))
-
-        stats = sum_stats(build)
+        base_stats = sum_stats(build)
 
         best = None
 
         for food in foods:
-            boosted = apply_food(stats, food)
-            dps = compute_dps(boosted)
+            boosted = apply_food(base_stats, food)
 
-            if not best or dps > best["dps"]:
+            # total materia slots across gear
+            total_slots = sum(i.get("materia_slots", 2) for i in build)
+
+            materia_result = optimize_materia(
+                boosted,
+                total_slots,
+                compute_dps,
+                compute_gcd,
+                target_gcd
+            )
+
+            if not best or materia_result["score"] > best["score"]:
                 best = {
-                    "dps": dps,
+                    "score": materia_result["score"],
+                    "dps": materia_result["dps"],
+                    "gcd": materia_result["gcd"],
                     "food": food["name"],
-                    "stats": boosted
+                    "melds": materia_result["melds"]
                 }
 
         results.append({
             "build": build,
-            "score": best["dps"],
+            "score": best["score"],
+            "dps": best["dps"],
+            "gcd": best["gcd"],
             "food": best["food"],
-            "stats": best["stats"]
+            "melds": best["melds"]
         })
 
     results.sort(key=lambda x: x["score"], reverse=True)
