@@ -7,7 +7,10 @@ from engine.dps_model import compute_dps
 from engine.logger import log
 
 
-def solve(items, target_gcd, foods=None, top_n=3):
+# =========================
+# MAIN SOLVER (CORE)
+# =========================
+def solve(items, target_gcd=2.38, foods=None, top_n=3):
 
     slots = [
         "weapon", "head", "body", "hands",
@@ -23,6 +26,11 @@ def solve(items, target_gcd, foods=None, top_n=3):
 
     for s in slots:
         log(f"{s}: {len(gear[s])}")
+
+    # prevent zero-slot crash
+    for s in slots:
+        if not gear[s]:
+            log(f"WARNING: No items for slot '{s}'")
 
     total = 1
     for s in slots:
@@ -50,7 +58,11 @@ def solve(items, target_gcd, foods=None, top_n=3):
             pct = int((checked / total) * 100)
             log(f"{checked}/{total} ({pct}%) | {elapsed:.1f}s")
 
-        materia_stats, melds = optimize_materia_for_set(combo)
+        try:
+            materia_stats, melds = optimize_materia_for_set(combo)
+        except Exception as e:
+            log(f"Materia error: {e}")
+            continue
 
         best_score = 0
         best_food = None
@@ -87,3 +99,27 @@ def solve(items, target_gcd, foods=None, top_n=3):
     log("Finished solver")
 
     return best[:top_n]
+
+
+# =========================
+# SAFE ENTRY POINT (FIXES YOUR CRASH)
+# =========================
+def run_solver(items, target_gcd=2.38):
+    log("Running solver wrapper...")
+
+    if not items:
+        log("ERROR: No items loaded")
+        return
+
+    try:
+        results = solve(items, target_gcd=target_gcd)
+
+        log("Top Results:")
+        for i, r in enumerate(results, 1):
+            log(f"#{i} Score={r['score']:.2f} Food={r['food']}")
+
+        return results
+
+    except Exception as e:
+        log(f"FATAL SOLVER ERROR: {e}")
+        raise
