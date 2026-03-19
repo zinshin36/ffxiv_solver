@@ -7,37 +7,47 @@ from engine.dps_model import compute_dps
 from engine.logger import log
 
 
-# =========================
-# MAIN SOLVER (CORE)
-# =========================
-def solve(items, target_gcd=2.38, foods=None, top_n=3):
+SLOTS = [
+    "weapon", "head", "body", "hands",
+    "legs", "feet", "earrings",
+    "necklace", "bracelet", "ring"
+]
 
-    slots = [
-        "weapon", "head", "body", "hands",
-        "legs", "feet", "earrings",
-        "necklace", "bracelet", "ring"
-    ]
 
-    gear = {s: [] for s in slots}
+def build_gear_table(items):
+    gear = {s: [] for s in SLOTS}
 
     for item in items:
-        if item["slot"] in gear:
-            gear[item["slot"]].append(item)
+        slot = item.get("slot")
+        if slot in gear:
+            gear[slot].append(item)
 
-    for s in slots:
-        log(f"{s}: {len(gear[s])}")
+    for s in SLOTS:
+        log(f"[GEAR] {s}: {len(gear[s])}")
 
-    # prevent zero-slot crash
-    for s in slots:
-        if not gear[s]:
-            log(f"WARNING: No items for slot '{s}'")
+    return gear
 
+
+def estimate_total_combinations(gear):
     total = 1
-    for s in slots:
+
+    for s in SLOTS:
         total *= max(1, len(gear[s]))
+
+    # rings are double
     total *= max(1, len(gear["ring"]))
 
-    log(f"Total combinations: {total}")
+    return total
+
+
+def solve(items, target_gcd=2.38, top_n=3):
+
+    log("=== SOLVER START ===")
+
+    gear = build_gear_table(items)
+
+    total = estimate_total_combinations(gear)
+    log(f"[SOLVER] Estimated combinations: {total}")
 
     combos = itertools.product(
         gear["weapon"], gear["head"], gear["body"], gear["hands"],
@@ -55,71 +65,58 @@ def solve(items, target_gcd=2.38, foods=None, top_n=3):
 
         if checked % 1000 == 0:
             elapsed = time.time() - start
-            pct = int((checked / total) * 100)
-            log(f"{checked}/{total} ({pct}%) | {elapsed:.1f}s")
+            log(f"[PROGRESS] {checked} checked | {elapsed:.2f}s")
 
         try:
             materia_stats, melds = optimize_materia_for_set(combo)
         except Exception as e:
-            log(f"Materia error: {e}")
+            log(f"[ERROR] Materia failure: {e}")
             continue
 
-        best_score = 0
-        best_food = None
-        best_stats = None
-
-        for food in foods or [{}]:
-            total_stats = materia_stats.copy()
-
-            for k in food:
-                if k != "name":
-                    total_stats[k] += food[k]
-
-            gcd = calculate_gcd(total_stats["sps"])
-            dps = compute_dps(total_stats)
+        try:
+            gcd = calculate_gcd(materia_stats["sps"])
+            dps = compute_dps(materia_stats)
 
             penalty = abs(gcd - target_gcd) * 2000
             score = dps - penalty
-
-            if score > best_score:
-                best_score = score
-                best_food = food.get("name", "None")
-                best_stats = total_stats
+        except Exception as e:
+            log(f"[ERROR] DPS failure: {e}")
+            continue
 
         best.append({
-            "score": best_score,
+            "score": score,
             "build": combo,
-            "food": best_food,
-            "stats": best_stats,
+            "stats": materia_stats,
             "melds": melds
         })
 
     best.sort(key=lambda x: x["score"], reverse=True)
 
-    log("Finished solver")
+    log("=== SOLVER COMPLETE ===")
 
     return best[:top_n]
 
 
-# =========================
-# SAFE ENTRY POINT (FIXES YOUR CRASH)
-# =========================
 def run_solver(items, target_gcd=2.38):
     log("Running solver wrapper...")
 
     if not items:
-        log("ERROR: No items loaded")
-        return
+        log("[FATAL] No items loaded")
+        return []
 
     try:
-        results = solve(items, target_gcd=target_gcd)
+        results = solve(items, target_gcd)
 
-        log("Top Results:")
         for i, r in enumerate(results, 1):
-            log(f"#{i} Score={r['score']:.2f} Food={r['food']}")
+            log(f"\n=== BUILD #{i} ===")
+            log(f"Score: {r['score']:.2f}")
+            log(f"Stats: {r['stats']}")
+
+            for item in r["build"]:
+                log(f" - {item['slot']}: {item['name']}")
 
         return results
 
     except Exception as e:
-        log(f"FATAL SOLVER ERROR: {e}")
+        log(f"[FATAL] Solver crashed: {e}")
         raise
