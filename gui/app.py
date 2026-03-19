@@ -12,35 +12,48 @@ class App:
 
     def __init__(self, root):
 
+        self.root = root
         root.title("FFXIV Solver")
 
         frame = tk.Frame(root)
         frame.pack(padx=10, pady=10)
 
-        # GCD
+        # -------------------------
+        # TARGET GCD
+        # -------------------------
         tk.Label(frame, text="Target GCD").grid(row=0, column=0)
         self.gcd = tk.Entry(frame)
         self.gcd.insert(0, "2.38")
         self.gcd.grid(row=0, column=1)
 
-        # iLvl
+        # -------------------------
+        # MIN ILVL
+        # -------------------------
         tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
         self.ilvl = tk.Entry(frame)
         self.ilvl.insert(0, "780")
         self.ilvl.grid(row=1, column=1)
 
-        # Food dropdown
+        # -------------------------
+        # FOOD
+        # -------------------------
         tk.Label(frame, text="Food").grid(row=2, column=0)
 
         self.food_var = tk.StringVar()
-        self.food_dropdown = tk.OptionMenu(frame, self.food_var, "")
+        self.food_var.set("None")
+
+        self.food_dropdown = tk.OptionMenu(frame, self.food_var, "None")
         self.food_dropdown.grid(row=2, column=1)
 
-        # Buttons
+        # -------------------------
+        # BUTTONS
+        # -------------------------
         tk.Button(frame, text="Detect Max iLvl", command=self.detect_ilvl).grid(row=3, column=0)
         tk.Button(frame, text="Run Solver", command=self.run).grid(row=3, column=1)
 
-        # Log box
+        # -------------------------
+        # LOG BOX
+        # -------------------------
         self.log_box = tk.Text(root, height=20, width=100)
         self.log_box.pack(padx=10, pady=10)
 
@@ -48,19 +61,22 @@ class App:
 
         log("GUI Ready")
 
+        self.foods = {}
         self.load_systems()
 
+    # =========================================================
+    # LOAD FOOD SYSTEM
+    # =========================================================
     def load_systems(self):
         log("Loading systems...")
 
-        self.foods = {}
+        self.foods = {"None": {}}
 
         try:
             if os.path.exists("foods.json"):
                 with open("foods.json", "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                    # convert list → dict by name
                     for food in data:
                         name = food.get("name")
                         if name:
@@ -69,14 +85,11 @@ class App:
             menu = self.food_dropdown["menu"]
             menu.delete(0, "end")
 
-            if not self.foods:
-                log("[INIT] No valid foods found")
-            else:
-                for food_name in self.foods:
-                    menu.add_command(
-                        label=food_name,
-                        command=lambda f=food_name: self.food_var.set(f)
-                    )
+            for food_name in self.foods:
+                menu.add_command(
+                    label=food_name,
+                    command=lambda f=food_name: self.food_var.set(f)
+                )
 
             log(f"[INIT] Foods loaded: {len(self.foods)}")
 
@@ -84,23 +97,61 @@ class App:
             log("[INIT ERROR] Failed to load foods.json")
             log(traceback.format_exc())
 
+    # =========================================================
+    # DETECT MAX ILVL
+    # =========================================================
     def detect_ilvl(self):
-        log("Detecting max item level...")
-        _, max_ilvl = load_items()
-        log(f"Max iLvl detected: {max_ilvl}")
+        try:
+            log("Detecting max item level...")
 
+            _, max_ilvl = load_items(0)
+
+            log(f"Max iLvl detected: {max_ilvl}")
+
+        except Exception:
+            log("[ERROR] detect_ilvl failed")
+            log(traceback.format_exc())
+
+    # =========================================================
+    # RUN SOLVER
+    # =========================================================
     def run(self):
-        gcd = float(self.gcd.get())
-        ilvl = int(self.ilvl.get())
-        food_name = self.food_var.get()
+        try:
+            gcd = float(self.gcd.get())
+            ilvl = int(self.ilvl.get())
+            food_name = self.food_var.get()
 
-        log(f"Running solver | GCD={gcd} | Min iLvl={ilvl} | Food={food_name}")
+            log(f"Running solver | GCD={gcd} | Min iLvl={ilvl} | Food={food_name}")
 
-        items, _ = load_items(ilvl)
+            # ✅ FIX: correct unpack
+            items, _ = load_items(ilvl)
 
-        selected_food = self.foods.get(food_name, {})
+            if not items:
+                log("[ERROR] No items loaded after filtering")
+                return
 
-        run_solver(items, gcd, selected_food)
+            selected_food = self.foods.get(food_name, {})
+
+            results = run_solver(items, gcd, selected_food)
+
+            if not results:
+                log("[RESULT] No valid gear sets found")
+                return
+
+            log("=== TOP RESULTS ===")
+
+            for i, r in enumerate(results, 1):
+                log(f"\n--- Build #{i} ---")
+                log(f"GCD: {r.get('gcd')}")
+                log(f"DPS: {r.get('dps')}")
+                log(f"Score: {r.get('score')}")
+
+                for item in r["build"]:
+                    log(f"{item['slot']:>10}: {item['name']}")
+
+        except Exception:
+            log("[ERROR] Solver crashed")
+            log(traceback.format_exc())
 
 
 def main():
