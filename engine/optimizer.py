@@ -1,66 +1,132 @@
 import itertools
 import time
+import json
+import os
 
-from engine.materia_optimizer import optimize_materia_for_set
-from engine.tier_solver import calculate_gcd
-from engine.dps_model import compute_dps
-from engine.food import foods
-from engine.blacklist import load_blacklist, is_blacklisted
 from engine.logger import log
+from engine.materia_system import load_materia, optimize_materia
+from engine.dps_model import compute_dps
+from engine.tier_solver import calculate_gcd
+from engine.blacklist import load_blacklist
 
 
-def run_solver(items, target_gcd=2.38):
+def load_food():
+    if not os.path.exists("foods.json"):
+        log("[FOOD] foods.json not found")
+        return []
+
+    with open("foods.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    log(f"[FOOD] Loaded {len(data)} foods")
+    return data
+
+
+def apply_food(stats, food):
+    result = stats.copy()
+
+    for k, v in food.items():
+        if k != "name":
+            result[k] = result.get(k, 0) + v
+
+    return result
+
+
+def solve(items, target_gcd, min_ilvl=0):
 
     log("=== SOLVER START ===")
 
+    # --- LOAD SYSTEMS ---
     blacklist = load_blacklist()
-    log(f"[SOLVER] Blacklist loaded: {len(blacklist)} entries")
+    materia_list = load_materia()
+    foods = load_food()
 
-    # Apply blacklist
-    items = [i for i in items if not is_blacklisted(i["name"], blacklist)]
-    log(f"[SOLVER] After blacklist: {len(items)} items")
+    log(f"[SOLVER] Blacklist: {len(blacklist)} entries")
+    log(f"[SOLVER] Materia: {len(materia_list)} loaded")
 
-    # Group by slot
+    # --- FILTER ONLY BY ILVL (OPTIONAL) ---
+    if min_ilvl > 0:
+        items = [i for i in items if i["ilvl"] >= min_ilvl]
+
+    log(f"[SOLVER] Items after ilvl filter: {len(items)}")
+
+    # --- GROUP ---
     gear = {}
-    for i in items:
-        gear.setdefault(i["slot"], []).append(i)
+    for item in items:
+        slot = item["slot"]
+        gear.setdefault(slot, []).append(item)
 
-    for slot in gear:
-        log(f"[GEAR] {slot}: {len(gear[slot])}")
+    for k in gear:
+        log(f"[GEAR] {k}: {len(gear[k])}")
+
+    # --- COMBINATIONS ---
+    slots = list(gear.keys())
+    lists = [gear[s] for s in slots]
 
     total = 1
-    for slot in gear:
-        total *= len(gear[slot])
+    for l in lists:
+        total *= len(l)
 
     log(f"[SOLVER] TOTAL COMBINATIONS: {total}")
 
-    combos = itertools.product(*gear.values())
-
     best = []
-    checked = 0
-    start = time.time()
 
-    for combo in combos:
+    start = time.time()
+    checked = 0
+
+    for combo in itertools.product(*lists):
+
         checked += 1
 
         if checked % 1000 == 0:
-            log(f"[PROGRESS] {checked}")
+            pct = (checked / total) * 100
+            elapsed = time.time() - start
+            log(f"[PROGRESS] {pct:.4f}% | {checked}/{total} | {elapsed:.1f}s")
 
-        materia_stats, melds = optimize_materia_for_set(combo)
+        # --- BASE STATS ---
+        total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
 
-        for food in foods:
+        for item in combo:
+            for k in total_stats:
+                total_stats[k] += item["stats"].get(k, 0)
 
-            stats = materia_stats.copy()
+        # --- MATERIA ---
+        melds, total_stats = optimize_materia(
+            {"stats": total_stats, "materia_slots": 10},
+            materia_list
+        )
 
-            for k, v in food.items():
-                if k != "name":
-                    stats[k] += v
+        # --- FOOD ---
+        best_score = 0
+        best_food = None
+
+        for food in foods or [{}]:
+
+            stats = apply_food(total_stats, food)
 
             gcd = calculate_gcd(stats["sps"])
             dps = compute_dps(stats)
 
-            score = dps - abs(gcd - target_gcd) * 2000
+            penalty = abs(gcd - target_gcd) * 2000
+            score = dps - penalty
 
-            best.append(score)
+            if score > best_score:
+                best_score = score
+                best_food = food.get("name", "None")
 
-    log("=== SOLVER DONE ===")
+        best.append({
+            "score": best_score,
+            "food": best_food
+        })
+
+    best.sort(key=lambda x: x["score"], reverse=True)
+
+    log("=== SOLVER COMPLETE ===")
+
+    top = best[:3]
+
+    if len(top) >= 2:
+        diff = top[0]["score"] - top[1]["score"]
+        log(f"[RESULT] DPS diff #1 vs #2: {diff:.2f}")
+
+    return top
