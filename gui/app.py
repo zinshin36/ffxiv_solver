@@ -1,59 +1,53 @@
-import csv
-import os
+import sys
+from engine.data_loader import load_items, load_materia
+from engine.food import load_foods
 from engine.logger import log
-from engine.runtime_paths import GAME_DATA_DIR
 
 # -------------------------
-# FOOD LOADER
+# GUI / App Core (CLI Version)
 # -------------------------
-def load_foods():
-    path = os.path.join(GAME_DATA_DIR, "Foods.csv")
-    foods = []
+class App:
+    def __init__(self):
+        self.items = []
+        self.materia = []
+        self.foods = []
 
-    if not os.path.exists(path):
-        log(f"[FOOD] File not found: {path}")
-        return foods
+    def load_systems(self):
+        log("[APP] Loading systems...")
 
-    try:
-        with open(path, encoding="utf-8") as f:
-            reader = csv.reader(f)
-            header = next(reader)
+        # Load foods
+        self.foods = load_foods()
 
-            # Flexible column detection
-            name_i = None
-            stats_start = None
+        # Load items
+        self.items = load_items(min_ilvl=0)
 
-            for i, col in enumerate(header):
-                col_l = col.lower()
-                if "name" in col_l:
-                    name_i = i
-                if "baseparamvalue" in col_l or "value" in col_l:
-                    stats_start = i
-                    break
+        # Load materia
+        self.materia = load_materia()
 
-            if name_i is None:
-                log("[FOOD] No 'name' column found in Foods.csv")
-                return foods
+        log("[APP] Systems loaded")
 
-            for row in reader:
-                try:
-                    name = row[name_i]
-                    stats = {}
+    def run_solver(self):
+        if not self.items:
+            log("[APP] No items loaded, cannot run solver")
+            return
 
-                    if stats_start is not None:
-                        for i in range(stats_start, len(row)):
-                            if row[i].strip() != "":
-                                stats[f"value{i-stats_start}"] = int(float(row[i]))
+        # Minimal placeholder solver for demo
+        log(f"[SOLVER] Running with {len(self.items)} items, {len(self.materia)} materia, {len(self.foods)} foods")
+        for i, item in enumerate(self.items[:5]):  # show only first 5 items for demo
+            log(f"Item #{i+1}: {item['name']} | Slot: {item['slot']} | Materia slots: {item.get('materia_slots', 0)}")
 
-                    foods.append({
-                        "name": name,
-                        "stats": stats
-                    })
-                except:
-                    continue
+# -------------------------
+# Main Entry Point
+# -------------------------
+def main():
+    log("[APP] GUI Ready")
+    app = App()
+    app.load_systems()
+    app.run_solver()
+    return app
 
-    except Exception as e:
-        log(f"[FOOD] Error reading Foods.csv: {e}")
-
-    log(f"[FOOD] Foods loaded: {len(foods)}")
-    return foods
+# -------------------------
+# Allow direct run
+# -------------------------
+if __name__ == "__main__":
+    main()
