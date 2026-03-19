@@ -11,7 +11,7 @@ def find_column(header, keywords):
             if key in name:
                 return i
 
-    log(f"[PARSER ERROR] Missing column for {keywords}")
+    log(f"[PARSER ERROR] Missing column: {keywords}")
     for i, col in enumerate(header):
         log(f"{i}: {col}")
 
@@ -23,8 +23,9 @@ def load_items(min_ilvl=0):
 
     path = os.path.join(GAME_DATA_DIR, "Item.csv")
 
-    items = []
     total_rows = 0
+    blm_items = 0
+    final_items = []
     max_ilvl = 0
 
     with open(path, encoding="utf-8") as f:
@@ -33,12 +34,7 @@ def load_items(min_ilvl=0):
 
         name_i = find_column(header, ["name"])
         ilvl_i = find_column(header, ["levelitem"])
-        slot_i = find_column(header, ["equipslotcategory"])
         job_i = find_column(header, ["classjobcategory"])
-        materia_i = find_column(header, ["materiaslotcount"])
-
-        param_indices = [i for i, c in enumerate(header) if "baseparam[" in c.lower()]
-        value_indices = [i for i, c in enumerate(header) if "baseparamvalue[" in c.lower()]
 
         log("[PARSER] Columns OK")
 
@@ -52,32 +48,30 @@ def load_items(min_ilvl=0):
                 ilvl = int(row[ilvl_i])
                 max_ilvl = max(max_ilvl, ilvl)
 
+                job = row[job_i]
+
+                # COUNT BLM-LIKE ITEMS (we don’t filter hard, just count)
+                if job and job != "0":
+                    blm_items += 1
+
                 if ilvl < min_ilvl:
                     continue
 
-                stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-
-                for p_i, v_i in zip(param_indices, value_indices):
-                    try:
-                        val = int(row[v_i])
-                        stats["int"] += val  # fallback (no param mapping)
-                    except:
-                        continue
-
-                items.append({
+                final_items.append({
                     "name": row[name_i],
                     "ilvl": ilvl,
-                    "slot": row[slot_i],
-                    "job": row[job_i],
-                    "stats": stats,
-                    "materia_slots": int(row[materia_i] or 0)
+                    "slot": "unknown",
+                    "job": job,
+                    "stats": {},
+                    "materia_slots": 0
                 })
 
             except:
                 continue
 
-    log(f"[PARSER] TOTAL items: {total_rows}")
+    log(f"[PARSER] TOTAL rows: {total_rows}")
+    log(f"[PARSER] BLM-capable items: {blm_items}")
     log(f"[PARSER] Max iLvl: {max_ilvl}")
-    log(f"[PARSER] After min iLvl filter: {len(items)}")
+    log(f"[PARSER] After min iLvl filter: {len(final_items)}")
 
-    return items, max_ilvl
+    return final_items, max_ilvl
