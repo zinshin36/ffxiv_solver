@@ -6,10 +6,23 @@ from engine.tier_solver import calculate_gcd
 from engine.dps_model import compute_dps
 
 
+# =========================
+# PUBLIC ENTRY (DO NOT REMOVE)
+# =========================
+def run_solver(items, target_gcd=2.38, food=None):
+    return solve(items, target_gcd, food)
+
+
+# =========================
+# MAIN SOLVER
+# =========================
 def solve(items, target_gcd, food=None):
 
     log("=== SOLVER START ===")
 
+    # -------------------------
+    # LOAD SYSTEMS
+    # -------------------------
     materia = load_materia()
     log(f"[SOLVER] Materia count: {len(materia)}")
 
@@ -19,9 +32,9 @@ def solve(items, target_gcd, food=None):
     items = [i for i in items if not any(b in i["name"].lower() for b in blacklist)]
     log(f"[SOLVER] Items after blacklist: {len(items)}")
 
-    # =========================
+    # -------------------------
     # GROUP BY SLOT
-    # =========================
+    # -------------------------
     gear = {
         "weapon": [],
         "head": [],
@@ -48,9 +61,9 @@ def solve(items, target_gcd, food=None):
     if gear["unknown"]:
         log(f"[WARNING] Unknown slot items: {len(gear['unknown'])}")
 
-    # =========================
+    # -------------------------
     # TOTAL COMBINATIONS
-    # =========================
+    # -------------------------
     total = (
         max(1, len(gear["weapon"])) *
         max(1, len(gear["head"])) *
@@ -67,9 +80,9 @@ def solve(items, target_gcd, food=None):
 
     log(f"[SOLVER] TOTAL COMBINATIONS: {total}")
 
-    # =========================
-    # COMBO LOOP (WITH PROGRESS)
-    # =========================
+    # -------------------------
+    # COMBO LOOP
+    # -------------------------
     combos = itertools.product(
         gear["weapon"], gear["head"], gear["body"], gear["hands"],
         gear["legs"], gear["feet"], gear["earrings"],
@@ -84,7 +97,7 @@ def solve(items, target_gcd, food=None):
         checked += 1
 
         if checked % 1000 == 0:
-            pct = (checked / total) * 100
+            pct = (checked / total) * 100 if total else 0
             log(f"[PROGRESS] {pct:.6f}% ({checked}/{total})")
 
         total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
@@ -93,6 +106,7 @@ def solve(items, target_gcd, food=None):
             for k in total_stats:
                 total_stats[k] += item["stats"].get(k, 0)
 
+        # APPLY FOOD
         if food:
             for k in food:
                 if k != "name":
@@ -103,9 +117,13 @@ def solve(items, target_gcd, food=None):
 
         score = dps - abs(gcd - target_gcd) * 2000
 
-        best.append((score, combo, total_stats))
+        best.append({
+            "score": score,
+            "stats": total_stats,
+            "build": combo
+        })
 
-    best.sort(key=lambda x: x[0], reverse=True)
+    best.sort(key=lambda x: x["score"], reverse=True)
 
     log("=== SOLVER COMPLETE ===")
 
