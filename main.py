@@ -10,10 +10,12 @@ try:
     from engine.optimizer import run_solver
     print("BOOT: optimizer imported")
 
-    from engine.logger import log
+    from engine.logger import log, init_logger
     print("BOOT: logger imported")
 
     def main():
+        init_logger()
+
         log("Application started")
 
         items = load_items()
@@ -27,4 +29,11 @@ try:
 except Exception as e:
     print("\n=== CRASH DETECTED ===")
     traceback.print_exc()
-    input("\nPress Enter to exit...")
+
+    # ❗ DO NOT USE input() (breaks EXE)
+    try:
+        import time
+        print("\nClosing in 10 seconds...")
+        time.sleep(10)
+    except:
+        pass
