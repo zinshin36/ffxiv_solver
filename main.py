@@ -1,38 +1,29 @@
 import traceback
 import sys
+import time
 
 print("BOOT: starting main.py")
 
 try:
-    from engine.data_parser import load_items
-    print("BOOT: data_parser imported")
-
-    from engine.optimizer import run_solver
-    print("BOOT: optimizer imported")
-
-    from engine.logger import log, init_logger
+    from engine.logger import init_logger, log
     print("BOOT: logger imported")
+
+    from gui.app import main as gui_main
+    print("BOOT: GUI imported")
 
     def main():
         init_logger()
-
-        log("Application started")
-
-        items = load_items()
-        log(f"Loaded {len(items)} items")
-
-        run_solver(items)
+        log("Application starting (GUI mode)...")
+        gui_main()
 
     if __name__ == "__main__":
         main()
 
-except Exception as e:
-    print("\n=== CRASH DETECTED ===")
+except Exception:
+    print("\n=== CRASH DETECTED (MAIN) ===")
     traceback.print_exc()
 
-    # ❗ DO NOT USE input() (breaks EXE)
     try:
-        import time
         print("\nClosing in 10 seconds...")
         time.sleep(10)
     except:
