@@ -1,53 +1,69 @@
 import sys
-from engine.data_loader import load_items, load_materia
-from engine.food import load_foods
-from engine.logger import log
+import traceback
 
 # -------------------------
-# GUI / App Core (CLI Version)
+# SAFE IMPORTS
 # -------------------------
-class App:
-    def __init__(self):
-        self.items = []
-        self.materia = []
-        self.foods = []
+try:
+    from engine.data_loader import load_items, load_materia
+except Exception as e:
+    print(f"[CRITICAL] Failed to import data_loader: {e}\n{traceback.format_exc()}")
+    load_items = None
+    load_materia = None
 
-    def load_systems(self):
-        log("[APP] Loading systems...")
+try:
+    from engine.food import load_foods
+except Exception as e:
+    print(f"[CRITICAL] Failed to import food: {e}\n{traceback.format_exc()}")
+    load_foods = None
 
-        # Load foods
-        self.foods = load_foods()
-
-        # Load items
-        self.items = load_items(min_ilvl=0)
-
-        # Load materia
-        self.materia = load_materia()
-
-        log("[APP] Systems loaded")
-
-    def run_solver(self):
-        if not self.items:
-            log("[APP] No items loaded, cannot run solver")
-            return
-
-        # Minimal placeholder solver for demo
-        log(f"[SOLVER] Running with {len(self.items)} items, {len(self.materia)} materia, {len(self.foods)} foods")
-        for i, item in enumerate(self.items[:5]):  # show only first 5 items for demo
-            log(f"Item #{i+1}: {item['name']} | Slot: {item['slot']} | Materia slots: {item.get('materia_slots', 0)}")
+try:
+    from engine.logger import log
+except Exception as e:
+    print(f"[CRITICAL] Failed to import logger: {e}\n{traceback.format_exc()}")
+    def log(msg): print(msg)
 
 # -------------------------
-# Main Entry Point
+# GUI / APP LOGIC
 # -------------------------
 def main():
-    log("[APP] GUI Ready")
-    app = App()
-    app.load_systems()
-    app.run_solver()
-    return app
+    log("[GUI] Application started")
+
+    if load_foods:
+        foods = load_foods()
+        log(f"[GUI] Foods loaded: {len(foods)}")
+    else:
+        log("[GUI] No foods loaded")
+
+    if load_items and load_materia:
+        log("[GUI] Loading systems...")
+
+        try:
+            items = load_items()
+            log(f"[GUI] {len(items)} items loaded")
+        except Exception as e:
+            log(f"[GUI] Failed to load items: {e}\n{traceback.format_exc()}")
+
+        try:
+            materia = load_materia()
+            log(f"[GUI] Materia loaded: {len(materia)}")
+        except Exception as e:
+            log(f"[GUI] Failed to load materia: {e}\n{traceback.format_exc()}")
+
+    else:
+        log("[GUI] Item or Materia loader missing")
+
+    log("[GUI] GUI Ready")
+    # You can put your actual GUI init code here (Tkinter, PyQt, etc.)
+    # For now, just a placeholder:
+    print("GUI running... (placeholder)")
 
 # -------------------------
-# Allow direct run
+# SAFE ENTRY POINT
 # -------------------------
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"[FATAL] Unhandled exception in main: {e}\n{traceback.format_exc()}")
+        sys.exit(1)
