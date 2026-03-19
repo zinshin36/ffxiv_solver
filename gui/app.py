@@ -1,7 +1,5 @@
 import tkinter as tk
 import threading
-import json
-import os
 
 from engine.data_parser import load_items
 from engine.optimizer import solve, load_food
@@ -30,15 +28,15 @@ class App:
         self.ilvl.insert(0, "0")
         self.ilvl.grid(row=1, column=1)
 
-        # FOOD DROPDOWN
+        # FOOD
         tk.Label(frame, text="Food").grid(row=2, column=0)
-
         self.food_var = tk.StringVar()
         self.food_dropdown = tk.OptionMenu(frame, self.food_var, "")
         self.food_dropdown.grid(row=2, column=1)
 
-        # BUTTON
-        tk.Button(frame, text="Run Solver", command=self.run).grid(row=3, column=0, columnspan=2)
+        # BUTTONS
+        tk.Button(frame, text="Detect Max iLvl", command=self.detect_ilvl).grid(row=3, column=0, columnspan=2)
+        tk.Button(frame, text="Run Solver", command=self.run).grid(row=4, column=0, columnspan=2)
 
         # LOG BOX
         self.log_box = tk.Text(root, height=20, width=90)
@@ -51,9 +49,10 @@ class App:
         self.items = []
         self.max_ilvl = 0
 
-        threading.Thread(target=self.load_data).start()
+        # load systems immediately
+        threading.Thread(target=self.load_systems).start()
 
-    def load_data(self):
+    def load_systems(self):
 
         log("Loading systems...")
 
@@ -64,7 +63,12 @@ class App:
         # food
         foods = load_food()
 
-        names = [f["name"] for f in foods] if foods else ["None"]
+        if not foods:
+            log("[FOOD] No foods loaded")
+            self.food_var.set("None")
+            return
+
+        names = [f["name"] for f in foods]
 
         self.food_var.set(names[0])
 
@@ -74,16 +78,28 @@ class App:
         for name in names:
             menu.add_command(label=name, command=lambda v=name: self.food_var.set(v))
 
-        # items
+        log(f"[FOOD] Dropdown populated with {len(names)} foods")
+
+    def detect_ilvl(self):
+        threading.Thread(target=self._detect_ilvl).start()
+
+    def _detect_ilvl(self):
+
         log("Detecting max item level...")
+
         self.items, self.max_ilvl = load_items()
 
-        log(f"Max iLvl detected: {self.max_ilvl}")
+        log(f"[RESULT] Total items loaded: {len(self.items)}")
+        log(f"[RESULT] Max iLvl detected: {self.max_ilvl}")
 
     def run(self):
         threading.Thread(target=self.run_solver).start()
 
     def run_solver(self):
+
+        if not self.items:
+            log("[ERROR] Items not loaded. Press 'Detect Max iLvl' first.")
+            return
 
         gcd = float(self.gcd.get())
         ilvl = int(self.ilvl.get())
