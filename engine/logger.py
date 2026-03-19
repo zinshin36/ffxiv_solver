@@ -17,9 +17,13 @@ def init_logger(widget=None):
     _log_file = open(filename, "w", encoding="utf-8")
 
 
+def set_widget(widget):
+    global _log_widget
+    _log_widget = widget
+
+
 def log(message):
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-
     line = f"[{timestamp}] {message}"
 
     print(line)
