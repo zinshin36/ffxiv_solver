@@ -25,7 +25,7 @@ def find_column(header, keywords):
     raise Exception(f"Column not found for {keywords}")
 
 
-def load_items():
+def load_items(min_ilvl=None):
     log("Loading Item.csv...")
 
     path = os.path.join(GAME_DATA_DIR, "Item.csv")
@@ -34,10 +34,10 @@ def load_items():
         raise Exception("Item.csv not found")
 
     items = []
+    max_ilvl = 0
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-
         header = next(reader)
 
         name_i = find_column(header, ["name", "singular", "itemname"])
@@ -53,10 +53,18 @@ def load_items():
                 log(f"[PARSER] Row {row_i}")
 
             try:
+                ilvl = int(row[ilvl_i])
+
+                if ilvl > max_ilvl:
+                    max_ilvl = ilvl
+
+                if min_ilvl and ilvl < min_ilvl:
+                    continue
+
                 item = {
                     "name": row[name_i],
-                    "ilvl": int(row[ilvl_i]),
-                    "slot": row[slot_i],  # raw for now
+                    "ilvl": ilvl,
+                    "slot": row[slot_i],
                     "stats": {
                         "crit": 0,
                         "dh": 0,
@@ -73,5 +81,6 @@ def load_items():
                 log(f"[PARSER ERROR] Row {row_i}: {e}")
                 continue
 
-    log(f"[PARSER] Loaded {len(items)} items")
-    return items
+    log(f"[PARSER] Loaded {len(items)} items (max ilvl: {max_ilvl})")
+
+    return items, max_ilvl
