@@ -1,5 +1,6 @@
 import csv
 import os
+import traceback
 from engine.logger import log
 from engine.runtime_paths import GAME_DATA_DIR
 
@@ -8,8 +9,8 @@ from engine.runtime_paths import GAME_DATA_DIR
 # -------------------------
 def load_foods():
     """
-    Loads consumable food items from Foods.csv
-    Returns a list of dicts with name and stat bonuses
+    Loads consumable food items from Foods.csv.
+    Returns a list of dicts with name and stat bonuses.
     """
     path = os.path.join(GAME_DATA_DIR, "Foods.csv")
 
@@ -53,12 +54,22 @@ def load_foods():
                         "name": name,
                         "stats": stats
                     })
-                except:
+                except Exception as e:
+                    log(f"[FOOD] Row parse error: {e} | row={row}")
                     continue
 
     except Exception as e:
-        log(f"[FOOD] Failed to load foods: {e}")
+        log(f"[FOOD] Failed to load Foods.csv: {e}\n{traceback.format_exc()}")
         return []
 
     log(f"[FOOD] Loaded {len(foods)} foods")
     return foods
+
+# -------------------------
+# SAFE TOP-LEVEL IMPORT
+# -------------------------
+try:
+    all_foods = load_foods()
+except Exception as e:
+    log(f"[FOOD] Fatal error on import: {e}\n{traceback.format_exc()}")
+    all_foods = []
