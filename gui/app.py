@@ -1,8 +1,7 @@
 import tkinter as tk
 
 from engine.data_parser import load_items
-from engine.materia_system import load_materia
-from engine.optimizer import solve
+from engine.optimizer import run_solver
 from engine.logger import log
 
 
@@ -10,7 +9,7 @@ class App:
 
     def __init__(self, root):
 
-        root.title("BLM Gear Solver")
+        root.title("BLM Solver")
 
         frame = tk.Frame(root, padx=10, pady=10)
         frame.pack()
@@ -21,37 +20,31 @@ class App:
         self.gcd.insert(0, "2.38")
         self.gcd.grid(row=0, column=1)
 
-        tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
-
-        self.ilvl = tk.Entry(frame)
-        self.ilvl.insert(0, "650")
-        self.ilvl.grid(row=1, column=1)
-
         tk.Button(
             frame,
             text="Run Solver",
             command=self.run
-        ).grid(row=2, column=0, columnspan=2)
+        ).grid(row=1, column=0, columnspan=2)
 
-        log("Application started")
+        log("GUI Ready")
 
     def run(self):
+        try:
+            gcd = float(self.gcd.get())
 
-        gcd = float(self.gcd.get())
-        ilvl = int(self.ilvl.get())
+            log("Loading items...")
+            items = load_items()
 
-        items = load_items(ilvl)
-        materia = load_materia()
+            log("Starting solver...")
+            run_solver(items, gcd)
 
-        solve(items, materia, gcd)
+        except Exception as e:
+            log(f"[GUI ERROR] {e}")
 
 
 def main():
-
     root = tk.Tk()
-
     App(root)
-
     root.mainloop()
 
 
