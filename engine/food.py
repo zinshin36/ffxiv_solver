@@ -1,25 +1,30 @@
-import csv
+import json
 import os
 from engine.logger import log
 from engine.runtime_paths import GAME_DATA_DIR
 
 def load_foods():
-    path = os.path.join(GAME_DATA_DIR, "Food.csv")
+    path = os.path.join(GAME_DATA_DIR, "foods.json")
     foods = []
+
     if not os.path.exists(path):
-        log("[FOOD] Food.csv not found")
+        log("[FOOD] foods.json not found")
         return foods
-    with open(path, encoding="utf-8") as f:
-        reader = csv.reader(f)
-        header = next(reader)
-        for row in reader:
-            try:
-                foods.append({
-                    "name": row[0],
-                    "bonus": row[1],
-                    "duration": row[2]
-                })
-            except:
-                continue
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+            for entry in data:
+                try:
+                    foods.append({
+                        "name": entry.get("name", ""),
+                        "bonus": entry.get("bonus", {}),
+                        "duration": entry.get("duration", 0)
+                    })
+                except Exception as e:
+                    log(f"[FOOD] Failed to parse entry: {e}")
+    except Exception as e:
+        log(f"[FOOD] Failed to load foods.json: {e}")
+
     log(f"[FOOD] Loaded {len(foods)} foods")
     return foods
