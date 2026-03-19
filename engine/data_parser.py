@@ -1,77 +1,57 @@
-import csv
-import os
-from engine.logger import log
-from engine.runtime_paths import GAME_DATA_DIR
-
-
-def find_column(header, keywords):
-    for i, col in enumerate(header):
-        name = col.lower()
-        for key in keywords:
-            if key in name:
-                return i
-
-    log(f"[PARSER ERROR] Missing column: {keywords}")
-    for i, col in enumerate(header):
-        log(f"{i}: {col}")
-
-    raise Exception(f"Column not found: {keywords}")
-
-
-def load_items(min_ilvl=0):
-    log("Loading Item.csv...")
-
-    path = os.path.join(GAME_DATA_DIR, "Item.csv")
-
-    total_rows = 0
-    blm_items = 0
-    final_items = []
-    max_ilvl = 0
+def load_equip_slots():
+    path = os.path.join(GAME_DATA_DIR, "EquipSlotCategory.csv")
+    slots = {}
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
+
+        next(reader)
         header = next(reader)
+        next(reader)
 
-        name_i = find_column(header, ["name"])
-        ilvl_i = find_column(header, ["levelitem"])
-        job_i = find_column(header, ["classjobcategory"])
+        log(f"[PARSER] EquipSlot headers: {header}")
 
-        log("[PARSER] Columns OK")
-
-        for idx, row in enumerate(reader):
-            total_rows += 1
-
-            if idx % 5000 == 0:
-                log(f"[PARSER] Row {idx}")
-
+        for row in reader:
             try:
-                ilvl = int(row[ilvl_i])
-                max_ilvl = max(max_ilvl, ilvl)
+                key = int(row[0])
 
-                job = row[job_i]
+                detected = None
 
-                # COUNT BLM-LIKE ITEMS (we don’t filter hard, just count)
-                if job and job != "0":
-                    blm_items += 1
+                for i in range(1, len(row)):
+                    if row[i] == "1":
+                        col = header[i].lower()
 
-                if ilvl < min_ilvl:
-                    continue
+                        # MUCH STRONGER MATCHING
+                        if "main" in col:
+                            detected = "weapon"
+                        elif "off" in col:
+                            detected = "offhand"
+                        elif "head" in col:
+                            detected = "head"
+                        elif "body" in col:
+                            detected = "body"
+                        elif "hand" in col or "glove" in col:
+                            detected = "hands"
+                        elif "leg" in col:
+                            detected = "legs"
+                        elif "foot" in col:
+                            detected = "feet"
+                        elif "ear" in col:
+                            detected = "earrings"
+                        elif "neck" in col:
+                            detected = "necklace"
+                        elif "wrist" in col:
+                            detected = "bracelet"
+                        elif "finger" in col or "ring" in col:
+                            detected = "ring"
 
-                final_items.append({
-                    "name": row[name_i],
-                    "ilvl": ilvl,
-                    "slot": "unknown",
-                    "job": job,
-                    "stats": {},
-                    "materia_slots": 0
-                })
+                if detected:
+                    slots[key] = detected
+                else:
+                    log(f"[SLOT WARNING] Unknown slot mapping for key {key}")
 
-            except:
-                continue
+            except Exception as e:
+                log(f"[SLOT ERROR] {e}")
 
-    log(f"[PARSER] TOTAL rows: {total_rows}")
-    log(f"[PARSER] BLM-capable items: {blm_items}")
-    log(f"[PARSER] Max iLvl: {max_ilvl}")
-    log(f"[PARSER] After min iLvl filter: {len(final_items)}")
-
-    return final_items, max_ilvl
+    log(f"[PARSER] Slot mappings loaded: {len(slots)}")
+    return slots
