@@ -4,57 +4,37 @@ import time
 from engine.materia_optimizer import optimize_materia_for_set
 from engine.tier_solver import calculate_gcd
 from engine.dps_model import compute_dps
+from engine.food import foods
+from engine.blacklist import load_blacklist, is_blacklisted
 from engine.logger import log
 
 
-SLOTS = [
-    "weapon", "head", "body", "hands",
-    "legs", "feet", "earrings",
-    "necklace", "bracelet", "ring"
-]
-
-
-def build_gear_table(items):
-    gear = {s: [] for s in SLOTS}
-
-    for item in items:
-        slot = item.get("slot")
-        if slot in gear:
-            gear[slot].append(item)
-
-    for s in SLOTS:
-        log(f"[GEAR] {s}: {len(gear[s])}")
-
-    return gear
-
-
-def estimate_total_combinations(gear):
-    total = 1
-
-    for s in SLOTS:
-        total *= max(1, len(gear[s]))
-
-    # rings are double
-    total *= max(1, len(gear["ring"]))
-
-    return total
-
-
-def solve(items, target_gcd=2.38, top_n=3):
+def run_solver(items, target_gcd=2.38):
 
     log("=== SOLVER START ===")
 
-    gear = build_gear_table(items)
+    blacklist = load_blacklist()
+    log(f"[SOLVER] Blacklist loaded: {len(blacklist)} entries")
 
-    total = estimate_total_combinations(gear)
-    log(f"[SOLVER] Estimated combinations: {total}")
+    # Apply blacklist
+    items = [i for i in items if not is_blacklisted(i["name"], blacklist)]
+    log(f"[SOLVER] After blacklist: {len(items)} items")
 
-    combos = itertools.product(
-        gear["weapon"], gear["head"], gear["body"], gear["hands"],
-        gear["legs"], gear["feet"], gear["earrings"],
-        gear["necklace"], gear["bracelet"],
-        gear["ring"], gear["ring"]
-    )
+    # Group by slot
+    gear = {}
+    for i in items:
+        gear.setdefault(i["slot"], []).append(i)
+
+    for slot in gear:
+        log(f"[GEAR] {slot}: {len(gear[slot])}")
+
+    total = 1
+    for slot in gear:
+        total *= len(gear[slot])
+
+    log(f"[SOLVER] TOTAL COMBINATIONS: {total}")
+
+    combos = itertools.product(*gear.values())
 
     best = []
     checked = 0
@@ -64,59 +44,23 @@ def solve(items, target_gcd=2.38, top_n=3):
         checked += 1
 
         if checked % 1000 == 0:
-            elapsed = time.time() - start
-            log(f"[PROGRESS] {checked} checked | {elapsed:.2f}s")
+            log(f"[PROGRESS] {checked}")
 
-        try:
-            materia_stats, melds = optimize_materia_for_set(combo)
-        except Exception as e:
-            log(f"[ERROR] Materia failure: {e}")
-            continue
+        materia_stats, melds = optimize_materia_for_set(combo)
 
-        try:
-            gcd = calculate_gcd(materia_stats["sps"])
-            dps = compute_dps(materia_stats)
+        for food in foods:
 
-            penalty = abs(gcd - target_gcd) * 2000
-            score = dps - penalty
-        except Exception as e:
-            log(f"[ERROR] DPS failure: {e}")
-            continue
+            stats = materia_stats.copy()
 
-        best.append({
-            "score": score,
-            "build": combo,
-            "stats": materia_stats,
-            "melds": melds
-        })
+            for k, v in food.items():
+                if k != "name":
+                    stats[k] += v
 
-    best.sort(key=lambda x: x["score"], reverse=True)
+            gcd = calculate_gcd(stats["sps"])
+            dps = compute_dps(stats)
 
-    log("=== SOLVER COMPLETE ===")
+            score = dps - abs(gcd - target_gcd) * 2000
 
-    return best[:top_n]
+            best.append(score)
 
-
-def run_solver(items, target_gcd=2.38):
-    log("Running solver wrapper...")
-
-    if not items:
-        log("[FATAL] No items loaded")
-        return []
-
-    try:
-        results = solve(items, target_gcd)
-
-        for i, r in enumerate(results, 1):
-            log(f"\n=== BUILD #{i} ===")
-            log(f"Score: {r['score']:.2f}")
-            log(f"Stats: {r['stats']}")
-
-            for item in r["build"]:
-                log(f" - {item['slot']}: {item['name']}")
-
-        return results
-
-    except Exception as e:
-        log(f"[FATAL] Solver crashed: {e}")
-        raise
+    log("=== SOLVER DONE ===")
