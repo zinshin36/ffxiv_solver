@@ -4,7 +4,7 @@ from engine.logger import log
 from engine.runtime_paths import GAME_DATA_DIR
 
 # -------------------------
-# SLOT MAP (SAFE CORE)
+# SLOT MAP & FILTERS
 # -------------------------
 SLOT_FIX = {
     3: "head",
@@ -18,32 +18,11 @@ SLOT_FIX = {
     12: "ring",
 }
 
-INVALID_SLOTS = {
-    0,   # belts (removed)
-    6,
-    13, 14, 15, 16,
-    17,  # soul crystal
-    18, 19, 20,
-    24
-}
+INVALID_SLOTS = {0, 6, 13, 14, 15, 16, 17, 18, 19, 20, 24}
 
 # -------------------------
-# SAFE COLUMN FINDER
+# SAFE UTILITIES
 # -------------------------
-def find_column(header, keywords, required=True):
-    header_lower = [h.lower() for h in header]
-
-    for key in keywords:
-        for i, col in enumerate(header_lower):
-            if key in col:
-                return i
-
-    if required:
-        raise Exception(f"Column not found: {keywords}")
-
-    return None
-
-
 def safe_int(v):
     try:
         return int(v)
@@ -53,27 +32,32 @@ def safe_int(v):
         except:
             return 0
 
+def find_column(header, keywords, required=True):
+    header_lower = [h.lower() for h in header]
+    for key in keywords:
+        for i, col in enumerate(header_lower):
+            if key in col:
+                return i
+    if required:
+        raise Exception(f"Column not found: {keywords}")
+    return None
+
 # -------------------------
-# BASE PARAMS
+# LOAD BASE PARAMS
 # -------------------------
 def load_base_params():
     path = os.path.join(GAME_DATA_DIR, "BaseParam.csv")
     params = {}
-
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-
         next(reader)
         header = next(reader)
         next(reader)
-
         name_i = find_column(header, ["name"])
-
         for row in reader:
             try:
                 key = safe_int(row[0])
                 name = row[name_i].lower()
-
                 if "critical" in name:
                     params[key] = "crit"
                 elif "direct" in name:
@@ -86,127 +70,83 @@ def load_base_params():
                     params[key] = "int"
             except:
                 continue
-
     log(f"[PARSER] Base params: {len(params)}")
     return params
 
 # -------------------------
-# JOB FILTER
+# LOAD JOBS (BLM FILTER)
 # -------------------------
 def load_jobs():
     path = os.path.join(GAME_DATA_DIR, "ClassJobCategory.csv")
     jobs = {}
-
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-
         next(reader)
         header = next(reader)
         next(reader)
-
         blm_i = find_column(header, ["blm", "black"])
-
         for row in reader:
             try:
                 key = safe_int(row[0])
                 jobs[key] = row[blm_i].strip() in ["1", "true", "True"]
             except:
                 continue
-
     return jobs
 
 # -------------------------
-# WEAPON DETECTION (ROBUST)
+# WEAPON DETECTION
 # -------------------------
 def detect_weapon(name, row, header):
-
     name_l = name.lower()
-
-    # direct name detection (works for both exports)
-    if any(x in name_l for x in [
-        "rod", "staff", "cane", "wand", "scepter"
-    ]):
+    if any(x in name_l for x in ["rod", "staff", "cane", "wand", "scepter"]):
         return True
-
-    # try ItemUICategory
     ui_idx = find_column(header, ["itemuicategory"], required=False)
-
     if ui_idx is not None:
         val = row[ui_idx]
-        if val and val.isdigit():
-            if int(val) < 100:
-                return True
-
+        if val and val.isdigit() and int(val) < 100:
+            return True
     return False
 
 # -------------------------
-# MAIN LOADER
+# LOAD ITEMS
 # -------------------------
 def load_items(min_ilvl=0):
-
-    log("Loading Item.csv...")
-
+    log("[PARSER] Loading Item.csv...")
     base_params = load_base_params()
     jobs = load_jobs()
-
     path = os.path.join(GAME_DATA_DIR, "Item.csv")
-
     items = []
     max_ilvl = 0
-
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
-
         header = next(reader)
-
-        # flexible column detection
+        # column detection (robust for both CSV formats)
         name_i = find_column(header, ["name"])
         ilvl_i = find_column(header, ["levelitem", "itemlevel"])
         slot_i = find_column(header, ["equipslotcategory"])
         job_i = find_column(header, ["classjobcategory"])
-
         materia_i = find_column(header, ["materiaslotcount"], required=False)
-
-        # param columns (both formats supported)
         param_indices = [i for i, c in enumerate(header) if "baseparam[" in c.lower()]
         value_indices = [i for i, c in enumerate(header) if "baseparamvalue[" in c.lower()]
-
         for row in reader:
             try:
                 ilvl = safe_int(row[ilvl_i])
                 max_ilvl = max(max_ilvl, ilvl)
-
                 if not jobs.get(safe_int(row[job_i]), False):
                     continue
-
                 if ilvl < min_ilvl:
                     continue
-
                 name = row[name_i]
                 slot_key = safe_int(row[slot_i])
-
-                # -------------------------
                 # SLOT LOGIC
-                # -------------------------
                 if slot_key in INVALID_SLOTS:
-                    if detect_weapon(name, row, header):
-                        slot = "weapon"
-                    else:
-                        continue
+                    slot = "weapon" if detect_weapon(name, row, header) else None
                 else:
-                    slot = SLOT_FIX.get(slot_key)
-
-                    if not slot:
-                        if detect_weapon(name, row, header):
-                            slot = "weapon"
-                        else:
-                            continue
-
-                # -------------------------
+                    slot = SLOT_FIX.get(slot_key) or ("weapon" if detect_weapon(name, row, header) else None)
+                if not slot:
+                    continue
                 # STATS
-                # -------------------------
                 stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-
                 for p_i, v_i in zip(param_indices, value_indices):
                     try:
                         stat = base_params.get(safe_int(row[p_i]))
@@ -214,14 +154,8 @@ def load_items(min_ilvl=0):
                             stats[stat] += safe_int(row[v_i])
                     except:
                         continue
-
-                # -------------------------
-                # MATERIA SLOTS (SAFE)
-                # -------------------------
-                materia_slots = 0
-                if materia_i is not None:
-                    materia_slots = safe_int(row[materia_i])
-
+                # MATERIA SLOTS
+                materia_slots = safe_int(row[materia_i]) if materia_i is not None else 0
                 items.append({
                     "name": name,
                     "ilvl": ilvl,
@@ -229,47 +163,30 @@ def load_items(min_ilvl=0):
                     "stats": stats,
                     "materia_slots": materia_slots
                 })
-
             except:
                 continue
-
     log(f"[PARSER] Max iLvl: {max_ilvl}")
     log(f"[PARSER] Items after filter: {len(items)}")
     return items
 
 # -------------------------
-# MATERIA LOADER
+# LOAD MATERIA
 # -------------------------
 def load_materia():
     path = os.path.join(GAME_DATA_DIR, "Materia.csv")
     materia_list = []
-
-    if not os.path.exists(path):
-        log(f"[MATERIA] File not found: {path}")
-        return materia_list
-
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader)
-
-        # Flexible column detection
-        item_cols = [i for i, c in enumerate(header) if "item[" in c.lower()]
-        baseparam_col = find_column(header, ["baseparam"], required=False)
-        value_cols = [i for i, c in enumerate(header) if "value[" in c.lower()]
-
         for row in reader:
             try:
-                items = [row[i] for i in item_cols if row[i].strip()]
-                baseparam = safe_int(row[baseparam_col]) if baseparam_col is not None else None
-                values = [safe_int(row[i]) for i in value_cols]
-
                 materia_list.append({
-                    "items": items,
-                    "baseparam": baseparam,
-                    "values": values
+                    "id": safe_int(row[0]),
+                    "item": [safe_int(v) for v in row[1:17]],
+                    "base_param": safe_int(row[17]),
+                    "values": [safe_int(v) for v in row[18:34]]
                 })
             except:
                 continue
-
-    log(f"[MATERIA] Materia parsed ({len(materia_list)})")
+    log(f"[PARSER] Materia parsed ({len(materia_list)})")
     return materia_list
