@@ -12,16 +12,34 @@ from engine.blacklist import load_blacklist
 
 def load_food():
 
-    if not os.path.exists("foods.json"):
-        log("[FOOD] foods.json not found")
+    path = os.path.join(os.getcwd(), "foods.json")
+
+    log(f"[FOOD] Looking for foods.json at: {path}")
+
+    if not os.path.exists(path):
+        log("[FOOD] ERROR: foods.json NOT FOUND")
         return []
 
-    with open("foods.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-    log(f"[FOOD] Loaded {len(data)} foods")
+        # SUPPORT BOTH FORMATS
+        if isinstance(data, dict):
+            foods = []
+            for k, v in data.items():
+                entry = {"name": k}
+                entry.update(v)
+                foods.append(entry)
+        else:
+            foods = data
 
-    return data
+        log(f"[FOOD] Loaded {len(foods)} foods")
+        return foods
+
+    except Exception as e:
+        log(f"[FOOD] ERROR parsing foods.json: {e}")
+        return []
 
 
 def apply_food(stats, food):
@@ -46,12 +64,13 @@ def solve(items, target_gcd, min_ilvl, selected_food):
     log(f"[INIT] Blacklist entries: {len(blacklist)}")
     log(f"[INIT] Materia loaded: {len(materia_list)}")
 
-    # pick selected food only
+    # SELECT FOOD
     food = next((f for f in foods if f["name"] == selected_food), {})
 
-    log(f"[INIT] Selected food: {selected_food}")
+    if not food:
+        log("[FOOD] WARNING: Selected food not found, using NONE")
 
-    # FILTER ONLY HERE
+    # FILTER
     filtered = []
 
     for i in items:
@@ -64,7 +83,7 @@ def solve(items, target_gcd, min_ilvl, selected_food):
 
         filtered.append(i)
 
-    log(f"[FILTER] Items after ilvl+blacklist: {len(filtered)}")
+    log(f"[FILTER] Items after filter: {len(filtered)}")
 
     # GROUP
     gear = {}
@@ -97,13 +116,11 @@ def solve(items, target_gcd, min_ilvl, selected_food):
             for k in stats:
                 stats[k] += item["stats"].get(k, 0)
 
-        # materia
         _, stats = optimize_materia(
             {"stats": stats, "materia_slots": 10},
             materia_list
         )
 
-        # food
         stats = apply_food(stats, food)
 
         gcd = calculate_gcd(stats["sps"])
