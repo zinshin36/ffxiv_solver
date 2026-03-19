@@ -20,12 +20,10 @@ def find_column(header, keywords):
 
 
 def load_items():
-    log("Loading Item.csv...")
 
     path = os.path.join(GAME_DATA_DIR, "Item.csv")
 
-    items = []
-    max_ilvl = 0
+    log("Loading ALL items (no filters)...")
 
     with open(path, encoding="utf-8") as f:
         reader = csv.reader(f)
@@ -34,10 +32,15 @@ def load_items():
         name_i = find_column(header, ["name"])
         ilvl_i = find_column(header, ["levelitem"])
         slot_i = find_column(header, ["equipslotcategory"])
+        job_i = find_column(header, ["classjobcategory"])
 
-        log(f"[PARSER] Columns OK")
+        total_items = 0
+        usable_items = []
+        max_ilvl = 0
 
         for i, row in enumerate(reader):
+
+            total_items += 1
 
             if i % 5000 == 0:
                 log(f"[PARSER] Row {i}")
@@ -46,16 +49,23 @@ def load_items():
                 ilvl = int(row[ilvl_i])
                 max_ilvl = max(max_ilvl, ilvl)
 
-                items.append({
+                # store RAW item
+                item = {
                     "name": row[name_i],
                     "ilvl": ilvl,
                     "slot": row[slot_i],
+                    "job": row[job_i],
                     "stats": {},
                     "materia_slots": 2
-                })
+                }
 
-            except Exception:
+                usable_items.append(item)
+
+            except:
                 continue
 
-    log(f"[PARSER] Loaded {len(items)} TOTAL items (max ilvl: {max_ilvl})")
-    return items, max_ilvl
+    log(f"[PARSER] TOTAL rows: {total_items}")
+    log(f"[PARSER] TOTAL usable (no filter yet): {len(usable_items)}")
+    log(f"[PARSER] Max iLvl: {max_ilvl}")
+
+    return usable_items, max_ilvl
