@@ -1,162 +1,128 @@
+import threading
 import tkinter as tk
-import json
-import os
-import traceback
+from tkinter import ttk
 
-from engine.data_parser import load_items
 from engine.optimizer import run_solver
-from engine.logger import log, init_logger
+from engine.data_loader import load_items, load_materia
+from engine.food import load_foods
 
 
 class App:
-
     def __init__(self, root):
-
         self.root = root
-        root.title("FFXIV Solver")
+        self.root.title("FFXIV BiS Solver")
 
-        frame = tk.Frame(root)
-        frame.pack(padx=10, pady=10)
-
-        # -------------------------
-        # TARGET GCD
-        # -------------------------
-        tk.Label(frame, text="Target GCD").grid(row=0, column=0)
-        self.gcd = tk.Entry(frame)
-        self.gcd.insert(0, "2.38")
-        self.gcd.grid(row=0, column=1)
-
-        # -------------------------
-        # MIN ILVL
-        # -------------------------
-        tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
-        self.ilvl = tk.Entry(frame)
-        self.ilvl.insert(0, "780")
-        self.ilvl.grid(row=1, column=1)
-
-        # -------------------------
-        # FOOD
-        # -------------------------
-        tk.Label(frame, text="Food").grid(row=2, column=0)
-
-        self.food_var = tk.StringVar()
-        self.food_var.set("None")
-
-        self.food_dropdown = tk.OptionMenu(frame, self.food_var, "None")
-        self.food_dropdown.grid(row=2, column=1)
-
-        # -------------------------
-        # BUTTONS
-        # -------------------------
-        tk.Button(frame, text="Detect Max iLvl", command=self.detect_ilvl).grid(row=3, column=0)
-        tk.Button(frame, text="Run Solver", command=self.run).grid(row=3, column=1)
-
-        # -------------------------
-        # LOG BOX
-        # -------------------------
-        self.log_box = tk.Text(root, height=20, width=100)
+        self.log_box = tk.Text(root, height=25, width=120)
         self.log_box.pack(padx=10, pady=10)
 
-        init_logger(self.log_box)
+        controls = ttk.Frame(root)
+        controls.pack(pady=5)
 
-        log("GUI Ready")
+        ttk.Label(controls, text="GCD Target").grid(row=0, column=0)
+        self.gcd_entry = ttk.Entry(controls)
+        self.gcd_entry.insert(0, "2.2")
+        self.gcd_entry.grid(row=0, column=1)
 
-        self.foods = {}
-        self.load_systems()
+        ttk.Label(controls, text="Min iLvl").grid(row=0, column=2)
+        self.ilvl_entry = ttk.Entry(controls)
+        self.ilvl_entry.insert(0, "780")
+        self.ilvl_entry.grid(row=0, column=3)
 
-    # =========================================================
-    # LOAD FOOD SYSTEM
-    # =========================================================
-    def load_systems(self):
-        log("Loading systems...")
+        ttk.Button(controls, text="Run Solver", command=self.start_solver).grid(row=0, column=4, padx=10)
 
-        self.foods = {"None": {}}
+        self.log("GUI Ready")
 
+        # Load static systems
+        self.log("Loading systems...")
+        self.foods = load_foods(self.log)
+        self.log(f"[INIT] Foods loaded: {len(self.foods)}")
+
+    # =========================
+    # LOGGING (THREAD SAFE)
+    # =========================
+
+    def log(self, msg):
+        def write():
+            self.log_box.insert(tk.END, msg + "\n")
+            self.log_box.see(tk.END)
+
+        self.root.after(0, write)
+
+    # =========================
+    # SOLVER THREAD
+    # =========================
+
+    def start_solver(self):
+        thread = threading.Thread(target=self.run_solver)
+        thread.start()
+
+    def run_solver(self):
         try:
-            if os.path.exists("foods.json"):
-                with open("foods.json", "r", encoding="utf-8") as f:
-                    data = json.load(f)
+            gcd = float(self.gcd_entry.get())
+            min_ilvl = int(self.ilvl_entry.get())
 
-                    for food in data:
-                        name = food.get("name")
-                        if name:
-                            self.foods[name] = food
+            self.log(f"Running solver | GCD={gcd} | Min iLvl={min_ilvl}")
 
-            menu = self.food_dropdown["menu"]
-            menu.delete(0, "end")
+            # Load data
+            items_by_slot = load_items(min_ilvl, self.log)
+            materia_csv = load_materia(self.log)
 
-            for food_name in self.foods:
-                menu.add_command(
-                    label=food_name,
-                    command=lambda f=food_name: self.food_var.set(f)
-                )
+            config = {
+                "gcd_target": gcd
+            }
 
-            log(f"[INIT] Foods loaded: {len(self.foods)}")
-
-        except Exception:
-            log("[INIT ERROR] Failed to load foods.json")
-            log(traceback.format_exc())
-
-    # =========================================================
-    # DETECT MAX ILVL
-    # =========================================================
-    def detect_ilvl(self):
-        try:
-            log("Detecting max item level...")
-
-            _, max_ilvl = load_items(0)
-
-            log(f"Max iLvl detected: {max_ilvl}")
-
-        except Exception:
-            log("[ERROR] detect_ilvl failed")
-            log(traceback.format_exc())
-
-    # =========================================================
-    # RUN SOLVER
-    # =========================================================
-    def run(self):
-        try:
-            gcd = float(self.gcd.get())
-            ilvl = int(self.ilvl.get())
-            food_name = self.food_var.get()
-
-            log(f"Running solver | GCD={gcd} | Min iLvl={ilvl} | Food={food_name}")
-
-            # ✅ FIX: correct unpack
-            items, _ = load_items(ilvl)
-
-            if not items:
-                log("[ERROR] No items loaded after filtering")
-                return
-
-            selected_food = self.foods.get(food_name, {})
-
-            results = run_solver(items, gcd, selected_food)
+            results = run_solver(items_by_slot, materia_csv, config, self.log)
 
             if not results:
-                log("[RESULT] No valid gear sets found")
+                self.log("[RESULT] No valid gear sets found")
                 return
 
-            log("=== TOP RESULTS ===")
+            self.display_results(results)
 
-            for i, r in enumerate(results, 1):
-                log(f"\n--- Build #{i} ---")
-                log(f"GCD: {r.get('gcd')}")
-                log(f"DPS: {r.get('dps')}")
-                log(f"Score: {r.get('score')}")
+        except Exception as e:
+            self.log(f"[ERROR] {e}")
 
-                for item in r["build"]:
-                    log(f"{item['slot']:>10}: {item['name']}")
+    # =========================
+    # DISPLAY RESULTS
+    # =========================
 
-        except Exception:
-            log("[ERROR] Solver crashed")
-            log(traceback.format_exc())
+    def display_results(self, results):
+        self.log("=== TOP RESULTS ===")
 
+        for i, entry in enumerate(results):
+            build = entry["build"]
+            result = entry["result"]
+
+            self.log("")
+            self.log(f"--- Build #{i+1} ---")
+            self.log(f"GCD: {round(result['gcd'], 3)}")
+            self.log(f"DPS: {result['dps']}")
+            self.log(f"Score: {result['score']}")
+
+            # Gear
+            for slot, item in build.items():
+                name = item.get("Name", "Unknown")
+                self.log(f"{slot:>10}: {name}")
+
+                # ✅ SHOW MATERIA
+                mats = result.get("materia", {}).get(slot, [])
+
+                if mats:
+                    for m in mats:
+                        self.log(f"            + Materia -> Param {m['param']} | +{m['value']}")
+                else:
+                    self.log(f"            (no materia)")
+
+            self.log("-" * 50)
+
+
+# =========================
+# MAIN
+# =========================
 
 def main():
     root = tk.Tk()
-    App(root)
+    app = App(root)
     root.mainloop()
 
 
