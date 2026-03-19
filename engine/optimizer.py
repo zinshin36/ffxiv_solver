@@ -1,144 +1,152 @@
 import itertools
 import time
 
-from engine.logger import log
-from engine.materia_system import load_materia
-from engine.blacklist import load_blacklist
-from engine.tier_solver import calculate_gcd
-from engine.dps_model import compute_dps
 
+# =========================
+# MATERIA LOADING
+# =========================
 
-def run_solver(items, target_gcd=2.38, food=None):
-    return solve(items, target_gcd, food)
+def load_materia(csv_data, logger):
+    materia = []
 
+    for row in csv_data:
+        try:
+            base_param = int(row.get("BaseParam", -1))
 
-def solve(items, target_gcd, food=None):
+            # Find first non-zero value
+            value = 0
+            for i in range(16):
+                v = int(row.get(f"Value[{i}]", 0))
+                if v > 0:
+                    value = v
+                    break
 
-    log("=== SOLVER START ===")
+            if base_param >= 0 and value > 0:
+                materia.append({
+                    "param": base_param,
+                    "value": value
+                })
 
-    start_time = time.time()
-    last_update = start_time
-
-    materia = load_materia()
-    blacklist = load_blacklist()
-
-    items = [i for i in items if not any(b in i["name"].lower() for b in blacklist)]
-
-    # -------------------------
-    # GROUP BY SLOT
-    # -------------------------
-    gear = {}
-
-    for item in items:
-        gear.setdefault(item["slot"], []).append(item)
-
-    required_slots = [
-        "weapon", "head", "body", "hands",
-        "legs", "feet", "earrings",
-        "necklace", "bracelet", "ring"
-    ]
-
-    for s in required_slots:
-        if s not in gear or not gear[s]:
-            log(f"[ERROR] Missing slot: {s}")
-            return []
-
-    # -------------------------
-    # TOTAL COMBINATIONS
-    # -------------------------
-    total = (
-        len(gear["weapon"]) *
-        len(gear["head"]) *
-        len(gear["body"]) *
-        len(gear["hands"]) *
-        len(gear["legs"]) *
-        len(gear["feet"]) *
-        len(gear["earrings"]) *
-        len(gear["necklace"]) *
-        len(gear["bracelet"]) *
-        len(gear["ring"]) *
-        len(gear["ring"])
-    )
-
-    log(f"[SOLVER] TOTAL COMBINATIONS: {total:,}")
-
-    combos = itertools.product(
-        gear["weapon"], gear["head"], gear["body"], gear["hands"],
-        gear["legs"], gear["feet"], gear["earrings"],
-        gear["necklace"], gear["bracelet"],
-        gear["ring"], gear["ring"]
-    )
-
-    best = []
-    checked = 0
-
-    for combo in combos:
-        checked += 1
-
-        # -------------------------
-        # PREVENT DUPLICATE RINGS
-        # -------------------------
-        if combo[-1]["name"] == combo[-2]["name"]:
+        except Exception:
             continue
 
-        # -------------------------
-        # PROGRESS UPDATE (TIME-BASED)
-        # -------------------------
-        now = time.time()
+    logger(f"Materia parsed ({len(materia)})")
+    return materia
 
-        if now - last_update >= 0.5:  # update every 0.5s
-            elapsed = now - start_time
-            speed = checked / elapsed if elapsed > 0 else 0
 
-            pct = (checked / total) * 100 if total else 0
-            remaining = (total - checked) / speed if speed > 0 else 0
+# =========================
+# APPLY MATERIA
+# =========================
 
-            log(
-                f"[PROGRESS] {pct:.4f}% | "
-                f"{checked:,}/{total:,} | "
-                f"{speed:,.0f}/s | "
-                f"ETA: {remaining:,.1f}s"
-            )
+def apply_materia_to_item(item, materia_list):
+    """
+    Apply best materia to item based on available slots
+    """
 
-            last_update = now
+    slots = int(item.get("MateriaSlotCount", 0))
+    overmeld = item.get("IsAdvancedMeldingPermitted", "False") == "True"
 
-        # -------------------------
-        # STAT SUM
-        # -------------------------
-        total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
+    max_slots = slots + (2 if overmeld else 0)
 
-        for item in combo:
-            for k in total_stats:
-                total_stats[k] += item["stats"].get(k, 0)
+    applied = []
+    stats = item["stats"].copy()
 
-        # -------------------------
-        # APPLY FOOD
-        # -------------------------
-        if food:
-            for k in food:
-                if k != "name":
-                    total_stats[k] += food[k]
+    # Sort materia by value (best first)
+    materia_sorted = sorted(materia_list, key=lambda x: x["value"], reverse=True)
 
-        # -------------------------
-        # SCORE
-        # -------------------------
-        gcd = calculate_gcd(total_stats["sps"])
-        dps = compute_dps(total_stats)
+    for mat in materia_sorted[:max_slots]:
+        param = mat["param"]
+        val = mat["value"]
 
-        score = dps - abs(gcd - target_gcd) * 1500
+        stats[param] = stats.get(param, 0) + val
+        applied.append(mat)
 
-        best.append({
-            "score": score,
-            "stats": total_stats,
-            "build": combo,
-            "gcd": gcd,
-            "dps": dps
+    return stats, applied
+
+
+# =========================
+# BUILD EVALUATION
+# =========================
+
+def evaluate_build(build, materia, logger):
+    total_stats = {}
+
+    applied_materia = {}
+
+    for slot, item in build.items():
+        stats, mats = apply_materia_to_item(item, materia)
+
+        applied_materia[slot] = mats
+
+        for k, v in stats.items():
+            total_stats[k] = total_stats.get(k, 0) + v
+
+    # --- SIMPLE DPS MODEL (you can refine later)
+    main_stat = total_stats.get(0, 0)
+    crit = total_stats.get(1, 0)
+    dh = total_stats.get(2, 0)
+    det = total_stats.get(3, 0)
+    speed = total_stats.get(4, 0)
+
+    dps = (
+        main_stat * 1.0 +
+        crit * 0.5 +
+        dh * 0.4 +
+        det * 0.3 +
+        speed * 0.2
+    )
+
+    gcd = max(2.0, 2.5 - (speed / 10000))
+
+    score = dps - (abs(gcd - 2.2) * 100)
+
+    return {
+        "dps": dps,
+        "gcd": gcd,
+        "score": score,
+        "materia": applied_materia
+    }
+
+
+# =========================
+# SOLVER
+# =========================
+
+def run_solver(items_by_slot, materia_csv, config, logger):
+    logger("=== SOLVER START ===")
+
+    start = time.time()
+
+    materia = load_materia(materia_csv, logger)
+
+    slots = list(items_by_slot.keys())
+
+    if "weapon" not in slots:
+        logger("[ERROR] Missing slot: weapon")
+        return []
+
+    all_combos = list(itertools.product(*items_by_slot.values()))
+
+    logger(f"[SOLVER] TOTAL COMBINATIONS: {len(all_combos):,}")
+
+    results = []
+
+    for idx, combo in enumerate(all_combos):
+        build = dict(zip(slots, combo))
+
+        result = evaluate_build(build, materia, logger)
+
+        results.append({
+            "build": build,
+            "result": result
         })
 
-    best.sort(key=lambda x: x["score"], reverse=True)
+        # Progress logging every 100
+        if idx % 100 == 0:
+            logger(f"[SOLVER] Progress: {idx}/{len(all_combos)}")
 
-    total_time = time.time() - start_time
+    results.sort(key=lambda x: x["result"]["score"], reverse=True)
 
-    log(f"=== SOLVER COMPLETE ({total_time:.2f}s) ===")
+    logger(f"=== SOLVER COMPLETE ({time.time() - start:.2f}s) ===")
 
-    return best[:10]
+    return results[:10]
