@@ -1,3 +1,5 @@
+# REPLACE ENTIRE FILE
+
 import itertools
 from engine.logger import log
 from engine.materia_system import load_materia
@@ -6,83 +8,35 @@ from engine.tier_solver import calculate_gcd
 from engine.dps_model import compute_dps
 
 
-# =========================
-# PUBLIC ENTRY (DO NOT REMOVE)
-# =========================
 def run_solver(items, target_gcd=2.38, food=None):
     return solve(items, target_gcd, food)
 
 
-# =========================
-# MAIN SOLVER
-# =========================
 def solve(items, target_gcd, food=None):
 
     log("=== SOLVER START ===")
 
-    # -------------------------
-    # LOAD SYSTEMS
-    # -------------------------
     materia = load_materia()
-    log(f"[SOLVER] Materia count: {len(materia)}")
-
     blacklist = load_blacklist()
-    log(f"[SOLVER] Blacklist loaded: {len(blacklist)}")
 
     items = [i for i in items if not any(b in i["name"].lower() for b in blacklist)]
-    log(f"[SOLVER] Items after blacklist: {len(items)}")
 
-    # -------------------------
-    # GROUP BY SLOT
-    # -------------------------
-    gear = {
-        "weapon": [],
-        "head": [],
-        "body": [],
-        "hands": [],
-        "legs": [],
-        "feet": [],
-        "earrings": [],
-        "necklace": [],
-        "bracelet": [],
-        "ring": [],
-        "unknown": []
-    }
+    gear = {}
 
     for item in items:
-        slot = item.get("slot", "unknown")
-        if slot not in gear:
-            slot = "unknown"
-        gear[slot].append(item)
+        gear.setdefault(item["slot"], []).append(item)
 
-    for s in gear:
-        log(f"[GEAR] {s}: {len(gear[s])}")
+    required_slots = [
+        "weapon", "head", "body", "hands",
+        "legs", "feet", "earrings",
+        "necklace", "bracelet", "ring"
+    ]
 
-    if gear["unknown"]:
-        log(f"[WARNING] Unknown slot items: {len(gear['unknown'])}")
+    for s in required_slots:
+        if s not in gear or not gear[s]:
+            log(f"[ERROR] Missing slot: {s}")
+            return []
 
-    # -------------------------
-    # TOTAL COMBINATIONS
-    # -------------------------
-    total = (
-        max(1, len(gear["weapon"])) *
-        max(1, len(gear["head"])) *
-        max(1, len(gear["body"])) *
-        max(1, len(gear["hands"])) *
-        max(1, len(gear["legs"])) *
-        max(1, len(gear["feet"])) *
-        max(1, len(gear["earrings"])) *
-        max(1, len(gear["necklace"])) *
-        max(1, len(gear["bracelet"])) *
-        max(1, len(gear["ring"])) *
-        max(1, len(gear["ring"]))
-    )
-
-    log(f"[SOLVER] TOTAL COMBINATIONS: {total}")
-
-    # -------------------------
-    # COMBO LOOP
-    # -------------------------
     combos = itertools.product(
         gear["weapon"], gear["head"], gear["body"], gear["hands"],
         gear["legs"], gear["feet"], gear["earrings"],
@@ -91,14 +45,12 @@ def solve(items, target_gcd, food=None):
     )
 
     best = []
-    checked = 0
 
     for combo in combos:
-        checked += 1
 
-        if checked % 1000 == 0:
-            pct = (checked / total) * 100 if total else 0
-            log(f"[PROGRESS] {pct:.6f}% ({checked}/{total})")
+        # 🚨 prevent duplicate rings
+        if combo[-1]["name"] == combo[-2]["name"]:
+            continue
 
         total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
 
@@ -106,7 +58,6 @@ def solve(items, target_gcd, food=None):
             for k in total_stats:
                 total_stats[k] += item["stats"].get(k, 0)
 
-        # APPLY FOOD
         if food:
             for k in food:
                 if k != "name":
@@ -115,16 +66,18 @@ def solve(items, target_gcd, food=None):
         gcd = calculate_gcd(total_stats["sps"])
         dps = compute_dps(total_stats)
 
-        score = dps - abs(gcd - target_gcd) * 2000
+        score = dps - abs(gcd - target_gcd) * 1500
 
         best.append({
             "score": score,
             "stats": total_stats,
-            "build": combo
+            "build": combo,
+            "gcd": gcd,
+            "dps": dps
         })
 
     best.sort(key=lambda x: x["score"], reverse=True)
 
     log("=== SOLVER COMPLETE ===")
 
-    return best[:3]
+    return best[:10]
