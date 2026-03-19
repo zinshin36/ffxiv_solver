@@ -1,30 +1,33 @@
 import traceback
 import sys
-import time
+import os
 
-print("BOOT: starting main.py")
+def write_crash(e):
+    try:
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/crash.txt", "w", encoding="utf-8") as f:
+            f.write("=== CRASH ===\n\n")
+            f.write(traceback.format_exc())
+    except:
+        pass
+
+
+print("BOOT: starting EXE")
 
 try:
-    from engine.logger import init_logger, log
-    print("BOOT: logger imported")
+    print("BOOT: importing GUI...")
+    from gui.app import main
 
-    from gui.app import main as gui_main
-    print("BOOT: GUI imported")
+    print("BOOT: launching GUI...")
+    main()
 
-    def main():
-        init_logger()
-        log("Application starting (GUI mode)...")
-        gui_main()
-
-    if __name__ == "__main__":
-        main()
-
-except Exception:
-    print("\n=== CRASH DETECTED (MAIN) ===")
+except Exception as e:
+    print("\n=== HARD CRASH ===")
     traceback.print_exc()
 
+    write_crash(e)
+
     try:
-        print("\nClosing in 10 seconds...")
-        time.sleep(10)
+        input("\nPress Enter to exit...")
     except:
         pass
