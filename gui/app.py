@@ -17,13 +17,13 @@ class App:
         frame = tk.Frame(root)
         frame.pack(padx=10, pady=10)
 
-        # Target GCD
+        # GCD
         tk.Label(frame, text="Target GCD").grid(row=0, column=0)
         self.gcd = tk.Entry(frame)
         self.gcd.insert(0, "2.38")
         self.gcd.grid(row=0, column=1)
 
-        # Min iLvl
+        # iLvl
         tk.Label(frame, text="Min iLvl").grid(row=1, column=0)
         self.ilvl = tk.Entry(frame)
         self.ilvl.insert(0, "780")
@@ -40,7 +40,7 @@ class App:
         tk.Button(frame, text="Detect Max iLvl", command=self.detect_ilvl).grid(row=3, column=0)
         tk.Button(frame, text="Run Solver", command=self.run).grid(row=3, column=1)
 
-        # Log output box
+        # Log box
         self.log_box = tk.Text(root, height=20, width=100)
         self.log_box.pack(padx=10, pady=10)
 
@@ -48,7 +48,6 @@ class App:
 
         log("GUI Ready")
 
-        # Load external systems
         self.load_systems()
 
     def load_systems(self):
@@ -59,13 +58,19 @@ class App:
         try:
             if os.path.exists("foods.json"):
                 with open("foods.json", "r", encoding="utf-8") as f:
-                    self.foods = json.load(f)
+                    data = json.load(f)
+
+                    # convert list → dict by name
+                    for food in data:
+                        name = food.get("name")
+                        if name:
+                            self.foods[name] = food
 
             menu = self.food_dropdown["menu"]
             menu.delete(0, "end")
 
             if not self.foods:
-                log("[INIT] No foods.json found or empty")
+                log("[INIT] No valid foods found")
             else:
                 for food_name in self.foods:
                     menu.add_command(
@@ -80,47 +85,29 @@ class App:
             log(traceback.format_exc())
 
     def detect_ilvl(self):
-        try:
-            log("Detecting max item level...")
-
-            _, max_ilvl = load_items()
-
-            log(f"Max iLvl detected: {max_ilvl}")
-
-        except Exception:
-            log("[ERROR] detect_ilvl failed")
-            log(traceback.format_exc())
+        log("Detecting max item level...")
+        _, max_ilvl = load_items()
+        log(f"Max iLvl detected: {max_ilvl}")
 
     def run(self):
-        try:
-            gcd = float(self.gcd.get())
-            ilvl = int(self.ilvl.get())
-            food_name = self.food_var.get()
+        gcd = float(self.gcd.get())
+        ilvl = int(self.ilvl.get())
+        food_name = self.food_var.get()
 
-            log(f"Running solver | GCD={gcd} | Min iLvl={ilvl} | Food={food_name}")
+        log(f"Running solver | GCD={gcd} | Min iLvl={ilvl} | Food={food_name}")
 
-            items, _ = load_items(ilvl)
+        items, _ = load_items(ilvl)
 
-            selected_food = self.foods.get(food_name, {})
+        selected_food = self.foods.get(food_name, {})
 
-            run_solver(items, gcd, selected_food)
-
-        except Exception:
-            log("[ERROR] Solver crashed")
-            log(traceback.format_exc())
+        run_solver(items, gcd, selected_food)
 
 
 def main():
-    try:
-        root = tk.Tk()
-        App(root)
-        root.mainloop()
+    root = tk.Tk()
+    App(root)
+    root.mainloop()
 
-    except Exception:
-        print("\n=== GUI CRASH ===")
-        print(traceback.format_exc())
 
-        try:
-            input("Press Enter to exit...")
-        except Exception:
-            pass
+if __name__ == "__main__":
+    main()
