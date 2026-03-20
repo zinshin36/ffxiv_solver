@@ -1,36 +1,13 @@
 import sys
 import traceback
 
-# DO NOT import anything risky at top level
-# (this is what was crashing your exe silently)
-
-def safe_imports():
-    try:
-        from engine.logger import log
-    except Exception:
-        def log(msg):
-            print(msg)
-
-    try:
-        from engine.food import load_foods
-    except Exception as e:
-        log(f"[IMPORT ERROR] food: {e}")
-        load_foods = lambda: []
-
-    try:
-        from engine.data_loader import load_items, load_materia
-    except Exception as e:
-        log(f"[IMPORT ERROR] data_loader: {e}")
-        load_items = lambda *args, **kwargs: []
-        load_materia = lambda: []
-
-    return log, load_foods, load_items, load_materia
-
-
 def main():
-    log, load_foods, load_items, load_materia = safe_imports()
-
     try:
+        # SAFE IMPORTS INSIDE MAIN (prevents import-time crashes)
+        from engine.logger import log
+        from engine.food import load_foods
+        from engine.data_loader import load_items, load_materia
+
         log("[GUI] Starting application")
 
         # -------------------------
@@ -47,13 +24,19 @@ def main():
 
         log("[GUI] GUI Ready")
 
-        # Keep app alive (prevents instant exit in EXE)
+        # Prevent EXE from instantly closing
         input("Press Enter to exit...")
 
     except Exception as e:
-        log("[CRASH DETECTED]")
-        log(str(e))
-        log(traceback.format_exc())
+        try:
+            from engine.logger import log
+            log("[CRASH DETECTED]")
+            log(str(e))
+            log(traceback.format_exc())
+        except Exception:
+            print("[CRASH DETECTED]")
+            print(str(e))
+            print(traceback.format_exc())
 
         try:
             input("Press Enter to exit...")
@@ -61,6 +44,5 @@ def main():
             pass
 
 
-# IMPORTANT: this must exist for import
 if __name__ == "__main__":
     main()
