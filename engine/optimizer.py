@@ -2,22 +2,16 @@ import itertools
 import time
 
 # -------------------------
-# CONSTANTS (Balance-like)
+# CONSTANTS
 # -------------------------
 LEVEL_MAIN = 390
 LEVEL_SUB = 400
 LEVEL_DIV = 1900
 
-# -------------------------
-# SAFE STAT GET
-# -------------------------
-def get_stat(stats, key):
-    if not stats:
-        return 0
-    return stats.get(key, 0)
+MATERIA_VALUE = 36
 
 # -------------------------
-# GCD CALC (REAL FORMULA)
+# GCD
 # -------------------------
 def compute_gcd(sps):
     base = 2.5
@@ -25,7 +19,7 @@ def compute_gcd(sps):
     return round(gcd, 3)
 
 # -------------------------
-# CRIT
+# DAMAGE FORMULAS
 # -------------------------
 def crit_rate(crit):
     return (200 * (crit - LEVEL_SUB) / LEVEL_DIV + 50) / 1000
@@ -33,100 +27,102 @@ def crit_rate(crit):
 def crit_damage(crit):
     return (1400 + (200 * (crit - LEVEL_SUB) / LEVEL_DIV)) / 1000
 
-# -------------------------
-# DH
-# -------------------------
 def dh_rate(dh):
     return (550 * (dh - LEVEL_SUB) / LEVEL_DIV) / 1000
 
-# -------------------------
-# DET
-# -------------------------
 def det_multi(det):
     return (140 * (det - LEVEL_MAIN) / LEVEL_DIV + 1000) / 1000
 
-# -------------------------
-# SPEED MULTI
-# -------------------------
 def speed_multi(sps):
     return (1000 + (130 * (sps - LEVEL_SUB) / LEVEL_DIV)) / 1000
 
 # -------------------------
-# DPS MODEL (Balance-like)
+# DPS (ILVL HEAVILY WEIGHTED)
 # -------------------------
-def compute_dps(stats):
+def compute_dps(stats, ilvl_total):
 
-    crit = get_stat(stats, "crit")
-    dh = get_stat(stats, "dh")
-    det = get_stat(stats, "det")
-    sps = get_stat(stats, "sps")
-    intel = get_stat(stats, "int")
+    crit = stats["crit"]
+    dh = stats["dh"]
+    det = stats["det"]
+    sps = stats["sps"]
+    intel = stats["int"]
 
-    cr = crit_rate(crit)
-    cd = crit_damage(crit)
-    dr = dh_rate(dh)
-    dm = det_multi(det)
-    sm = speed_multi(sps)
+    dmg = intel
+    dmg *= det_multi(det)
+    dmg *= speed_multi(sps)
 
-    # Expected damage multiplier
-    dmg = intel * dm * sm
+    dmg *= (1 + crit_rate(crit) * (crit_damage(crit) - 1))
+    dmg *= (1 + dh_rate(dh) * 0.25)
 
-    # crit + dh expected value
-    dmg *= (1 + cr * (cd - 1))
-    dmg *= (1 + dr * 0.25)
+    # 🔥 THIS FIXES BASE vs AUGMENTED
+    dmg *= (1 + ilvl_total * 0.002)
 
     return dmg
 
 # -------------------------
-# APPLY FOOD
+# FOOD
 # -------------------------
 def apply_food(stats, food):
-
     if not food:
         return stats
 
-    result = stats.copy()
+    out = stats.copy()
 
     for stat, (pct, cap) in food.items():
-        base = result.get(stat, 0)
+        base = out.get(stat, 0)
         bonus = min(int(base * pct), cap)
-        result[stat] = base + bonus
+        out[stat] += bonus
 
-    return result
+    return out
 
 # -------------------------
-# APPLY MATERIA (WITH OVERMELD)
+# SAFE STAT CAP
 # -------------------------
-MATERIA_VALUES = {
-    "crit": 36,
-    "dh": 36,
-    "det": 36,
-    "sps": 36
-}
+def apply_cap(base, current):
+    # simple but effective cap model
+    cap = int(base * 1.3)
+    return min(current, cap)
 
+# -------------------------
+# VALID MATERIA
+# -------------------------
 def apply_materia(item):
 
-    if not item:
-        return None, []
+    base = item["stats"]
+    stats = base.copy()
 
-    stats = item["stats"].copy()
+    slots = item.get("materia_slots", 0)
 
-    base_slots = item.get("materia_slots", 0)
+    # ONLY crafted gets overmeld
+    name = item["name"].lower()
+    is_crafted = "augmented" not in name and "bygone" in name
 
-    # assume crafted = can overmeld
-    overmeld_slots = 2 if item.get("ilvl", 0) < 790 else 0
-
-    total_slots = base_slots + overmeld_slots
+    if is_crafted:
+        slots += 2
 
     melds = []
 
-    for _ in range(total_slots):
-        # prioritize crit > det > dh > sps
-        best = max(stats, key=lambda k: stats[k] if k in MATERIA_VALUES else -1)
+    priority = ["crit", "det", "dh", "sps"]
 
-        if best in MATERIA_VALUES:
-            stats[best] += MATERIA_VALUES[best]
-            melds.append(f"{best}+{MATERIA_VALUES[best]}")
+    for _ in range(slots):
+
+        applied = False
+
+        for stat in priority:
+
+            new_val = stats[stat] + MATERIA_VALUE
+
+            # enforce cap
+            capped = apply_cap(base[stat], new_val)
+
+            if capped > stats[stat]:
+                stats[stat] = capped
+                melds.append(f"{stat}+{MATERIA_VALUE}")
+                applied = True
+                break
+
+        if not applied:
+            break
 
     return stats, melds
 
@@ -136,7 +132,8 @@ def apply_materia(item):
 def evaluate_build(build, food, target_gcd):
 
     total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-    melds_output = {}
+    melds_out = {}
+    ilvl_total = 0
 
     for slot, item in build.items():
 
@@ -145,27 +142,26 @@ def evaluate_build(build, food, target_gcd):
 
         stats, melds = apply_materia(item)
 
-        melds_output[slot] = melds
+        melds_out[slot] = melds
 
         for k in total:
             total[k] += stats.get(k, 0)
 
-    # apply food AFTER full gear
+        ilvl_total += item["ilvl"]
+
     total = apply_food(total, food)
 
     gcd = compute_gcd(total["sps"])
-    dps = compute_dps(total)
+    dps = compute_dps(total, ilvl_total)
 
-    # OPTIONAL GCD targeting
     if target_gcd:
-        penalty = abs(gcd - target_gcd) * 500
-        dps -= penalty
+        dps -= abs(gcd - target_gcd) * 500
 
     return {
         "stats": total,
         "gcd": gcd,
         "dps": dps,
-        "melds": melds_output
+        "melds": melds_out
     }
 
 # -------------------------
@@ -177,18 +173,15 @@ def run_solver(items_by_slot, food, target_gcd, logger):
 
     start = time.time()
 
-    # 🚫 REMOVE EMPTY OR NONE SLOTS
-    clean_slots = {}
+    clean = {}
     for slot, items in items_by_slot.items():
-        valid = [i for i in items if i is not None]
+        valid = [i for i in items if i]
         if not valid:
-            logger(f"[ERROR] Slot {slot} has no valid items")
             return []
-        clean_slots[slot] = valid
+        clean[slot] = valid
 
-    slots = list(clean_slots.keys())
-
-    combos = itertools.product(*clean_slots.values())
+    slots = list(clean.keys())
+    combos = itertools.product(*clean.values())
 
     results = []
 
@@ -198,13 +191,11 @@ def run_solver(items_by_slot, food, target_gcd, logger):
 
         result = evaluate_build(build, food, target_gcd)
 
-        if result is None:
-            continue
-
-        results.append({
-            "build": build,
-            "result": result
-        })
+        if result:
+            results.append({
+                "build": build,
+                "result": result
+            })
 
     results.sort(key=lambda x: x["result"]["dps"], reverse=True)
 
