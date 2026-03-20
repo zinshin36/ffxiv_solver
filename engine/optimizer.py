@@ -1,128 +1,72 @@
 import itertools
 import time
+from engine.dps_model import compute_dps
+from engine.gcd import compute_gcd
 
 
 # =========================
-# MATERIA LOADING
+# SIMPLE MATERIA (TEMP SAFE)
 # =========================
+def apply_materia(stats, slots):
+    result = stats.copy()
 
-def load_materia(csv_data, logger):
-    materia = []
+    for _ in range(slots):
+        result["crit"] += 36  # basic default
 
-    for row in csv_data:
-        try:
-            base_param = int(row.get("BaseParam", -1))
-
-            # Find first non-zero value
-            value = 0
-            for i in range(16):
-                v = int(row.get(f"Value[{i}]", 0))
-                if v > 0:
-                    value = v
-                    break
-
-            if base_param >= 0 and value > 0:
-                materia.append({
-                    "param": base_param,
-                    "value": value
-                })
-
-        except Exception:
-            continue
-
-    logger(f"Materia parsed ({len(materia)})")
-    return materia
-
-
-# =========================
-# APPLY MATERIA
-# =========================
-
-def apply_materia_to_item(item, materia_list):
-    """
-    Apply best materia to item based on available slots
-    """
-
-    slots = int(item.get("MateriaSlotCount", 0))
-    overmeld = item.get("IsAdvancedMeldingPermitted", "False") == "True"
-
-    max_slots = slots + (2 if overmeld else 0)
-
-    applied = []
-    stats = item["stats"].copy()
-
-    # Sort materia by value (best first)
-    materia_sorted = sorted(materia_list, key=lambda x: x["value"], reverse=True)
-
-    for mat in materia_sorted[:max_slots]:
-        param = mat["param"]
-        val = mat["value"]
-
-        stats[param] = stats.get(param, 0) + val
-        applied.append(mat)
-
-    return stats, applied
+    return result
 
 
 # =========================
 # BUILD EVALUATION
 # =========================
+def evaluate_build(build, target_gcd, food_bonus):
+    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
 
-def evaluate_build(build, materia, logger):
-    total_stats = {}
+    for item in build.values():
+        stats = item["stats"]
 
-    applied_materia = {}
+        # apply materia
+        stats = apply_materia(stats, item.get("materia_slots", 0))
 
-    for slot, item in build.items():
-        stats, mats = apply_materia_to_item(item, materia)
+        for k in total:
+            total[k] += stats.get(k, 0)
 
-        applied_materia[slot] = mats
+    # apply food
+    for stat, (pct, cap) in food_bonus.items():
+        base = total.get(stat, 0)
+        bonus = min(int(base * pct), cap)
+        total[stat] += bonus
 
-        for k, v in stats.items():
-            total_stats[k] = total_stats.get(k, 0) + v
+    gcd = compute_gcd(total["sps"])
+    dps = compute_dps(total)
 
-    # --- SIMPLE DPS MODEL (you can refine later)
-    main_stat = total_stats.get(0, 0)
-    crit = total_stats.get(1, 0)
-    dh = total_stats.get(2, 0)
-    det = total_stats.get(3, 0)
-    speed = total_stats.get(4, 0)
+    # GCD penalty (important for BLM)
+    penalty = abs(gcd - target_gcd) * 2000
 
-    dps = (
-        main_stat * 1.0 +
-        crit * 0.5 +
-        dh * 0.4 +
-        det * 0.3 +
-        speed * 0.2
-    )
-
-    gcd = max(2.0, 2.5 - (speed / 10000))
-
-    score = dps - (abs(gcd - 2.2) * 100)
+    score = dps - penalty
 
     return {
-        "dps": dps,
+        "stats": total,
         "gcd": gcd,
-        "score": score,
-        "materia": applied_materia
+        "dps": dps,
+        "score": score
     }
 
 
 # =========================
 # SOLVER
 # =========================
+def run_solver(items_by_slot, target_gcd, food_bonus, logger):
 
-def run_solver(items_by_slot, materia_csv, config, logger):
     logger("=== SOLVER START ===")
 
     start = time.time()
 
-    materia = load_materia(materia_csv, logger)
-
     slots = list(items_by_slot.keys())
 
+    # ensure weapon exists
     if "weapon" not in slots:
-        logger("[ERROR] Missing slot: weapon")
+        logger("[ERROR] Missing weapon slot")
         return []
 
     all_combos = list(itertools.product(*items_by_slot.values()))
@@ -134,19 +78,18 @@ def run_solver(items_by_slot, materia_csv, config, logger):
     for idx, combo in enumerate(all_combos):
         build = dict(zip(slots, combo))
 
-        result = evaluate_build(build, materia, logger)
+        result = evaluate_build(build, target_gcd, food_bonus)
 
         results.append({
             "build": build,
             "result": result
         })
 
-        # Progress logging every 100
         if idx % 100 == 0:
-            logger(f"[SOLVER] Progress: {idx}/{len(all_combos)}")
+            logger(f"[SOLVER] {idx}/{len(all_combos)}")
 
     results.sort(key=lambda x: x["result"]["score"], reverse=True)
 
-    logger(f"=== SOLVER COMPLETE ({time.time() - start:.2f}s) ===")
+    logger(f"=== SOLVER DONE ({time.time() - start:.2f}s) ===")
 
-    return results[:10]
+    return results[:3]  # TOP 3
