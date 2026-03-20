@@ -1,27 +1,67 @@
 import itertools
 import time
-from engine.dps_model import compute_dps, compute_gcd_from_sps
+from engine.dps_model import compute_dps
+from engine.spell_speed import gcd_from_sps
 
 
 MATERIA_VALUE = 36
+MATERIA_TYPES = ["crit", "dh", "det", "sps"]
 
 
-def apply_materia(stats, slots):
-    result = stats.copy()
-    melds = []
+# -------------------------
+# APPLY MATERIA TO ITEM
+# -------------------------
+def apply_best_materia(item, target_gcd):
 
-    for _ in range(slots):
+    base_stats = item["stats"]
+    slots = item.get("materia_slots", 0)
 
-        # choose stat with lowest current value (better balance)
-        stat = min(["crit", "dh", "det", "sps"], key=lambda s: result[s])
+    if slots <= 0:
+        return base_stats.copy(), []
 
-        result[stat] += MATERIA_VALUE
-        melds.append(f"{stat}+36")
+    best_stats = None
+    best_score = -1
+    best_melds = None
 
-    return result, melds
+    for combo in itertools.product(MATERIA_TYPES, repeat=slots):
+
+        stats = base_stats.copy()
+        melds = []
+
+        for m in combo:
+            stats[m] += MATERIA_VALUE
+            melds.append(f"{m}+{MATERIA_VALUE}")
+
+        gcd = gcd_from_sps(stats["sps"])
+
+        # prioritize matching GCD first
+        gcd_diff = abs(gcd - target_gcd)
+
+        score = (
+            stats["crit"] * 1.0 +
+            stats["dh"] * 0.9 +
+            stats["det"] * 0.8 +
+            stats["sps"] * 0.7
+        )
+
+        final_score = score - (gcd_diff * 1000)
+
+        if final_score > best_score:
+            best_score = final_score
+            best_stats = stats
+            best_melds = melds
+
+    return best_stats, best_melds
 
 
+# -------------------------
+# APPLY FOOD
+# -------------------------
 def apply_food(stats, food_bonus):
+
+    if not food_bonus:
+        return stats
+
     result = stats.copy()
 
     for stat, (pct, cap) in food_bonus.items():
@@ -32,52 +72,56 @@ def apply_food(stats, food_bonus):
     return result
 
 
-def is_unique_conflict(build):
-    seen = set()
-
-    for item in build.values():
-        name = item["name"]
-        if name in seen:
-            return True
-        seen.add(name)
-
-    return False
-
-
+# -------------------------
+# BUILD EVALUATION
+# -------------------------
 def evaluate_build(build, target_gcd, food_bonus):
 
-    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-    all_melds = []
+    total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
+    meld_summary = {}
 
-    for item in build.values():
-        stats, melds = apply_materia(item["stats"], item.get("materia_slots", 0))
+    # -------------------------
+    # APPLY MATERIA PER ITEM
+    # -------------------------
+    for slot, item in build.items():
 
-        all_melds.append({
+        stats, melds = apply_best_materia(item, target_gcd)
+
+        meld_summary[slot] = {
             "item": item["name"],
             "melds": melds
-        })
+        }
 
-        for k in total:
-            total[k] += stats.get(k, 0)
+        for k in total_stats:
+            total_stats[k] += stats.get(k, 0)
 
-    total = apply_food(total, food_bonus)
+    # -------------------------
+    # APPLY FOOD
+    # -------------------------
+    total_stats = apply_food(total_stats, food_bonus)
 
-    gcd = compute_gcd_from_sps(total["sps"])
-    dps = compute_dps(total)
+    # -------------------------
+    # FINAL CALC
+    # -------------------------
+    gcd = gcd_from_sps(total_stats["sps"])
+    dps = compute_dps(total_stats)
 
-    # soft target
-    penalty = abs(gcd - target_gcd) * 2000
+    # soft GCD targeting
+    penalty = abs(gcd - target_gcd) * 1000
     score = dps - penalty
 
     return {
-        "stats": total,
-        "gcd": gcd,
         "dps": dps,
+        "gcd": gcd,
         "score": score,
-        "melds": all_melds
+        "stats": total_stats,
+        "melds": meld_summary
     }
 
 
+# -------------------------
+# SOLVER
+# -------------------------
 def run_solver(items_by_slot, target_gcd, food_bonus, logger):
 
     logger("=== SOLVER START ===")
@@ -85,16 +129,16 @@ def run_solver(items_by_slot, target_gcd, food_bonus, logger):
     start = time.time()
 
     slots = list(items_by_slot.keys())
-    combos = itertools.product(*items_by_slot.values())
+
+    all_combos = list(itertools.product(*items_by_slot.values()))
+
+    logger(f"[SOLVER] TOTAL COMBINATIONS: {len(all_combos)}")
 
     results = []
 
-    for i, combo in enumerate(combos):
+    for idx, combo in enumerate(all_combos):
 
         build = dict(zip(slots, combo))
-
-        if is_unique_conflict(build):
-            continue
 
         result = evaluate_build(build, target_gcd, food_bonus)
 
@@ -103,11 +147,11 @@ def run_solver(items_by_slot, target_gcd, food_bonus, logger):
             "result": result
         })
 
-        if i % 500 == 0:
-            logger(f"[SOLVER] {i}")
+        if idx % 100 == 0:
+            logger(f"[SOLVER] {idx}/{len(all_combos)}")
 
     results.sort(key=lambda x: x["result"]["score"], reverse=True)
 
     logger(f"=== DONE ({time.time() - start:.2f}s) ===")
 
-    return results[:3]
+    return results[:10]
