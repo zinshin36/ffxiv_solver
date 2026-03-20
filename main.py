@@ -2,6 +2,17 @@ import traceback
 import sys
 import os
 
+# FORCE visible output EVEN IN WINDOWED MODE
+def force_console():
+    try:
+        import ctypes
+        ctypes.windll.kernel32.AllocConsole()
+        sys.stdout = open("CONOUT$", "w")
+        sys.stderr = open("CONOUT$", "w")
+    except Exception:
+        pass
+
+force_console()
 
 def write_crash(e):
     try:
@@ -17,10 +28,17 @@ print("BOOT: starting EXE")
 
 try:
     print("BOOT: importing GUI...")
-    from gui.app import main
+
+    # VERY SAFE IMPORT
+    import importlib
+    gui_module = importlib.import_module("gui.app")
+
+    if not hasattr(gui_module, "main"):
+        raise Exception("gui.app has NO main()")
 
     print("BOOT: launching GUI...")
-    main()
+
+    gui_module.main()
 
 except Exception as e:
     print("\n=== HARD CRASH ===")
