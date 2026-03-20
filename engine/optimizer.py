@@ -1,204 +1,157 @@
 import itertools
+import math
 import time
 
-# -------------------------
-# CONSTANTS
-# -------------------------
-LEVEL_MAIN = 390
+# Level constants (Lv100 - adjust if needed)
 LEVEL_SUB = 400
 LEVEL_DIV = 1900
+LEVEL_MAIN = 390
 
-MATERIA_VALUE = 36
+MATERIA_VALUES = {
+    "crit": 36,
+    "dh": 36,
+    "det": 36,
+    "sps": 36
+}
 
-# -------------------------
-# GCD
-# -------------------------
-def compute_gcd(sps):
-    base = 2.5
-    gcd = base * (1000 - (130 * (sps - LEVEL_SUB) / LEVEL_DIV)) / 1000
-    return round(gcd, 3)
+OVERMELD_VALUE = 12  # reduced strength
 
-# -------------------------
-# DAMAGE FORMULAS
-# -------------------------
-def crit_rate(crit):
-    return (200 * (crit - LEVEL_SUB) / LEVEL_DIV + 50) / 1000
+SLOTS = [
+    "weapon","head","body","hands","legs","feet",
+    "earrings","necklace","bracelet","ring1","ring2"
+]
 
-def crit_damage(crit):
-    return (1400 + (200 * (crit - LEVEL_SUB) / LEVEL_DIV)) / 1000
+# ----------------------------
+# STAT FORMULAS (AKHMORNING)
+# ----------------------------
+def calc_crit(crit):
+    rate = math.floor(200 * (crit - LEVEL_SUB) / LEVEL_DIV + 50) / 1000
+    bonus = (1400 + math.floor(200 * (crit - LEVEL_SUB) / LEVEL_DIV)) / 1000
+    return rate, bonus
 
-def dh_rate(dh):
-    return (550 * (dh - LEVEL_SUB) / LEVEL_DIV) / 1000
+def calc_dh(dh):
+    return math.floor(550 * (dh - LEVEL_SUB) / LEVEL_DIV) / 1000
 
-def det_multi(det):
-    return (140 * (det - LEVEL_MAIN) / LEVEL_DIV + 1000) / 1000
+def calc_det(det):
+    return (1000 + math.floor(140 * (det - LEVEL_MAIN) / LEVEL_DIV)) / 1000
 
-def speed_multi(sps):
-    return (1000 + (130 * (sps - LEVEL_SUB) / LEVEL_DIV)) / 1000
+def calc_sps(sps):
+    return (1000 + math.floor(130 * (sps - LEVEL_SUB) / LEVEL_DIV)) / 1000
 
-# -------------------------
-# DPS (ILVL HEAVILY WEIGHTED)
-# -------------------------
-def compute_dps(stats, ilvl_total):
+def calc_gcd(speed):
+    gcd = math.floor((2500 * (1000 + math.ceil(130 * (LEVEL_SUB - speed) / LEVEL_DIV)) / 10000)) / 100
+    return gcd
 
-    crit = stats["crit"]
-    dh = stats["dh"]
-    det = stats["det"]
-    sps = stats["sps"]
-    intel = stats["int"]
-
-    dmg = intel
-    dmg *= det_multi(det)
-    dmg *= speed_multi(sps)
-
-    dmg *= (1 + crit_rate(crit) * (crit_damage(crit) - 1))
-    dmg *= (1 + dh_rate(dh) * 0.25)
-
-    # 🔥 THIS FIXES BASE vs AUGMENTED
-    dmg *= (1 + ilvl_total * 0.002)
-
-    return dmg
-
-# -------------------------
-# FOOD
-# -------------------------
-def apply_food(stats, food):
-    if not food:
-        return stats
-
-    out = stats.copy()
-
-    for stat, (pct, cap) in food.items():
-        base = out.get(stat, 0)
-        bonus = min(int(base * pct), cap)
-        out[stat] += bonus
-
-    return out
-
-# -------------------------
-# SAFE STAT CAP
-# -------------------------
-def apply_cap(base, current):
-    # simple but effective cap model
-    cap = int(base * 1.3)
-    return min(current, cap)
-
-# -------------------------
-# VALID MATERIA
-# -------------------------
-def apply_materia(item):
-
-    base = item["stats"]
-    stats = base.copy()
-
-    slots = item.get("materia_slots", 0)
-
-    # ONLY crafted gets overmeld
-    name = item["name"].lower()
-    is_crafted = "augmented" not in name and "bygone" in name
-
-    if is_crafted:
-        slots += 2
-
+# ----------------------------
+# MATERIA SYSTEM
+# ----------------------------
+def apply_melds(item):
+    stats = item["stats"].copy()
     melds = []
 
-    priority = ["crit", "det", "dh", "sps"]
+    cap = max(stats.values())  # stat cap
 
+    slots = item.get("slots", 2)
+    overmeld = item.get("overmeld", 0)
+
+    # priority order (dynamic later)
+    priority = item.get("priority", ["crit","det","dh","sps"])
+
+    # normal slots
     for _ in range(slots):
-
-        applied = False
-
         for stat in priority:
-
-            new_val = stats[stat] + MATERIA_VALUE
-
-            # enforce cap
-            capped = apply_cap(base[stat], new_val)
-
-            if capped > stats[stat]:
-                stats[stat] = capped
-                melds.append(f"{stat}+{MATERIA_VALUE}")
-                applied = True
+            if stats[stat] + MATERIA_VALUES[stat] <= cap:
+                stats[stat] += MATERIA_VALUES[stat]
+                melds.append(f"{stat}+36")
                 break
 
-        if not applied:
-            break
+    # overmeld slots
+    for _ in range(overmeld):
+        for stat in priority:
+            if stats[stat] + OVERMELD_VALUE <= cap:
+                stats[stat] += OVERMELD_VALUE
+                melds.append(f"{stat}+12")
+                break
 
     return stats, melds
 
-# -------------------------
-# BUILD EVAL
-# -------------------------
-def evaluate_build(build, food, target_gcd):
+# ----------------------------
+# BUILD EVALUATION
+# ----------------------------
+def evaluate_build(build, food, target_gcd, build_mode):
+    total = {"crit":0,"dh":0,"det":0,"sps":0}
 
-    total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-    melds_out = {}
-    ilvl_total = 0
+    meld_info = {}
 
     for slot, item in build.items():
-
-        if not item:
-            return None
-
-        stats, melds = apply_materia(item)
-
-        melds_out[slot] = melds
+        stats, melds = apply_melds(item)
+        meld_info[slot] = melds
 
         for k in total:
-            total[k] += stats.get(k, 0)
+            total[k] += stats.get(k,0)
 
-        ilvl_total += item["ilvl"]
+    # apply food
+    if food:
+        for k,v in food.items():
+            total[k] += v
 
-    total = apply_food(total, food)
+    # formulas
+    crit_rate, crit_bonus = calc_crit(total["crit"])
+    dh_rate = calc_dh(total["dh"])
+    det_multi = calc_det(total["det"])
+    sps_multi = calc_sps(total["sps"])
+    gcd = calc_gcd(total["sps"])
 
-    gcd = compute_gcd(total["sps"])
-    dps = compute_dps(total, ilvl_total)
+    expected_crit = 1 + crit_rate * (crit_bonus - 1)
+    expected_dh = 1 + dh_rate * 0.25
 
+    dps = 1000 * det_multi * sps_multi * expected_crit * expected_dh
+
+    # GCD enforcement ONLY if user sets it
     if target_gcd:
-        dps -= abs(gcd - target_gcd) * 500
+        if abs(gcd - target_gcd) > 0.01:
+            return None
 
     return {
-        "stats": total,
-        "gcd": gcd,
         "dps": dps,
-        "melds": melds_out
+        "gcd": gcd,
+        "stats": total,
+        "melds": meld_info
     }
 
-# -------------------------
+# ----------------------------
 # SOLVER
-# -------------------------
-def run_solver(items_by_slot, food, target_gcd, logger):
-
-    logger("=== SOLVER START ===")
-
+# ----------------------------
+def run_solver(items_by_slot, food, target_gcd, logger, build_mode):
     start = time.time()
+    logger.info("=== SOLVER START ===")
 
-    clean = {}
-    for slot, items in items_by_slot.items():
-        valid = [i for i in items if i]
-        if not valid:
-            return []
-        clean[slot] = valid
+    # set priority based on mode
+    if build_mode == "SPS":
+        priority = ["sps","crit","det","dh"]
+    else:
+        priority = ["crit","det","dh","sps"]
 
-    slots = list(clean.keys())
-    combos = itertools.product(*clean.values())
+    for slot in items_by_slot:
+        for item in items_by_slot[slot]:
+            item["priority"] = priority
 
-    results = []
+    combinations = list(itertools.product(*items_by_slot.values()))
+    logger.info(f"[SOLVER] TOTAL COMBINATIONS: {len(combinations)}")
 
-    for combo in combos:
+    best = []
 
-        build = dict(zip(slots, combo))
+    for combo in combinations:
+        build = dict(zip(items_by_slot.keys(), combo))
 
-        result = evaluate_build(build, food, target_gcd)
+        result = evaluate_build(build, food, target_gcd, build_mode)
+        if not result:
+            continue
 
-        if result:
-            results.append({
-                "build": build,
-                "result": result
-            })
+        best.append((result["dps"], build, result))
 
-    results.sort(key=lambda x: x["result"]["dps"], reverse=True)
+    best.sort(key=lambda x: x[0], reverse=True)
 
-    logger(f"=== DONE ({time.time() - start:.2f}s) ===")
+    logger.info(f"=== DONE ({round(time.time()-start,2)}s) ===")
 
-    return results[:3]
+    return best[:3]
