@@ -4,7 +4,7 @@ import traceback
 
 from engine.logger import log, init_logger
 from engine.food import load_foods
-from engine.data_loader import load_items, load_materia
+from engine.data_loader import load_items
 from engine.blacklist import load_blacklist
 from engine.optimizer import run_solver
 
@@ -64,9 +64,6 @@ class App:
         self.max_ilvl = max(x["ilvl"] for x in self.items) if self.items else 0
         log(f"[INIT] Max iLvl detected: {self.max_ilvl}")
 
-        self.materia = load_materia()
-        log(f"[INIT] Materia loaded: {len(self.materia)}")
-
         self.blacklist = load_blacklist()
         log(f"[INIT] Blacklist loaded: {len(self.blacklist)} entries")
 
@@ -82,17 +79,31 @@ class App:
         log("[GUI] Ready")
 
     # -------------------------
+    # CONVERT FOOD TO BONUS
+    # -------------------------
+    def get_food_bonus(self, food_name):
+        if food_name == "None":
+            return {}
+
+        for f in self.foods:
+            if f["name"] == food_name:
+                return f["bonus"]
+
+        return {}
+
+    # -------------------------
     # SOLVER
     # -------------------------
     def run_solver(self):
         try:
             min_ilvl = int(self.min_ilvl_var.get() or 0)
 
-            target_gcd = None
+            target_gcd = 2.50
             if self.gcd_var.get().strip():
                 target_gcd = float(self.gcd_var.get())
 
             selected_food = self.food_var.get()
+            food_bonus = self.get_food_bonus(selected_food)
 
             log(f"[RUN] Min iLvl={min_ilvl} | GCD={target_gcd} | Food={selected_food}")
 
@@ -124,16 +135,12 @@ class App:
                 log(f"[SLOT] {s}: {len(slots[s])} items")
 
             # -------------------------
-            # RUN SOLVER
+            # RUN SOLVER (FIXED CALL)
             # -------------------------
             results = run_solver(
                 items_by_slot=slots,
-                materia_csv=self.materia,
-                config={
-                    "target_gcd": target_gcd,
-                    "food": selected_food,
-                    "foods": self.foods
-                },
+                target_gcd=target_gcd,
+                food_bonus=food_bonus,
                 logger=log
             )
 
