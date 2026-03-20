@@ -4,14 +4,11 @@ from engine.dps_model import compute_dps
 from engine.gcd import compute_gcd
 
 
-STAT_CAP = 3000  # safe cap
+STAT_CAP = 9000
 
 
 def apply_stat_caps(stats):
-    capped = {}
-    for k, v in stats.items():
-        capped[k] = min(v, STAT_CAP)
-    return capped
+    return {k: min(v, STAT_CAP) for k, v in stats.items()}
 
 
 def apply_food(stats, food_bonus):
@@ -26,12 +23,13 @@ def apply_food(stats, food_bonus):
 
 
 def apply_materia(stats, slots):
-    # greedy best stat (crit priority)
     result = stats.copy()
 
     for _ in range(slots):
-        best_stat = max(["crit", "dh", "det", "sps"], key=lambda s: result[s])
-        result[best_stat] += 36
+        # prioritize best scaling stat
+        best = max(result, key=lambda x: result[x] if x != "int" else -1)
+        if best != "int":
+            result[best] += 36
 
     return result
 
@@ -63,18 +61,18 @@ def evaluate_build(build, target_gcd, food_bonus):
     total = apply_stat_caps(total)
 
     gcd = compute_gcd(total["sps"])
-
-    # HARD FILTER (this fixes your issue)
-    if abs(gcd - target_gcd) > 0.02:
-        return None
-
     dps = compute_dps(total)
+
+    # 🔥 THIS is the correct behavior
+    penalty = abs(gcd - target_gcd) * 3000
+
+    score = dps - penalty
 
     return {
         "stats": total,
         "gcd": gcd,
         "dps": dps,
-        "score": dps
+        "score": score
     }
 
 
@@ -94,14 +92,10 @@ def run_solver(items_by_slot, target_gcd, food_bonus, logger):
 
         build = dict(zip(slots, combo))
 
-        # ❗ prevent duplicate rings / uniques
         if is_unique_conflict(build):
             continue
 
         result = evaluate_build(build, target_gcd, food_bonus)
-
-        if result is None:
-            continue
 
         results.append({
             "build": build,
