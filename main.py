@@ -2,24 +2,7 @@ import traceback
 import sys
 import os
 
-# -------------------------
-# FORCE CONSOLE (even if built windowed)
-# -------------------------
-def force_console():
-    try:
-        import ctypes
-        ctypes.windll.kernel32.AllocConsole()
-        sys.stdout = open("CONOUT$", "w")
-        sys.stderr = open("CONOUT$", "w")
-    except Exception:
-        pass
 
-force_console()
-
-
-# -------------------------
-# CRASH LOGGER
-# -------------------------
 def write_crash(e):
     try:
         os.makedirs("logs", exist_ok=True)
@@ -34,8 +17,6 @@ print("BOOT: starting EXE")
 
 try:
     print("BOOT: importing GUI...")
-
-    # STATIC IMPORT (IMPORTANT — PyInstaller NEEDS THIS)
     from gui.app import main
 
     print("BOOT: launching GUI...")
