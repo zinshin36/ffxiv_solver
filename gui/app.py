@@ -79,7 +79,7 @@ class App:
         log("[GUI] Ready")
 
     # -------------------------
-    # CONVERT FOOD TO BONUS
+    # GET FOOD BONUS
     # -------------------------
     def get_food_bonus(self, food_name):
         if food_name == "None":
@@ -87,7 +87,7 @@ class App:
 
         for f in self.foods:
             if f["name"] == food_name:
-                return f["bonus"]
+                return f.get("bonus", {})
 
         return {}
 
@@ -122,6 +122,7 @@ class App:
             # GROUP BY SLOT
             # -------------------------
             slots = {}
+
             for item in filtered:
                 slot = item["slot"]
 
@@ -135,7 +136,7 @@ class App:
                 log(f"[SLOT] {s}: {len(slots[s])} items")
 
             # -------------------------
-            # RUN SOLVER (FIXED CALL)
+            # RUN SOLVER
             # -------------------------
             results = run_solver(
                 items_by_slot=slots,
@@ -153,14 +154,25 @@ class App:
                 build = r["build"]
                 res = r["result"]
                 stats = res.get("stats", {})
+                melds = res.get("melds", {})
 
                 log(f"=== BUILD {i+1} ===")
                 log(f"DPS: {res['dps']:.2f}")
                 log(f"GCD: {res['gcd']:.3f}")
-                log(f"CRIT: {stats.get('crit',0)}  DH: {stats.get('dh',0)}  DET: {stats.get('det',0)}  SPS: {stats.get('sps',0)}\n")
+                log(
+                    f"CRIT: {stats.get('crit',0)}  "
+                    f"DH: {stats.get('dh',0)}  "
+                    f"DET: {stats.get('det',0)}  "
+                    f"SPS: {stats.get('sps',0)}\n"
+                )
 
                 for slot, item in build.items():
                     log(f"{slot}: {item['name']}")
+
+                    if slot in melds:
+                        meld_list = melds[slot]["melds"]
+                        if meld_list:
+                            log(f"   MATERIA: {', '.join(meld_list)}")
 
                 log("")
 
