@@ -3,10 +3,17 @@ import traceback
 
 def main():
     try:
-        # SAFE IMPORTS INSIDE MAIN (prevents import-time crashes)
-        from engine.logger import log
+        # -------------------------
+        # SAFE IMPORTS
+        # -------------------------
+        from engine.logger import log, init_logger
         from engine.food import load_foods
         from engine.data_loader import load_items, load_materia
+
+        # -------------------------
+        # INIT LOGGER (THIS WAS MISSING)
+        # -------------------------
+        init_logger()
 
         log("[GUI] Starting application")
 
@@ -24,7 +31,6 @@ def main():
 
         log("[GUI] GUI Ready")
 
-        # Prevent EXE from instantly closing
         input("Press Enter to exit...")
 
     except Exception as e:
