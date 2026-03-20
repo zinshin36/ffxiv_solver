@@ -11,17 +11,43 @@ from engine.blacklist import load_blacklist
 
 
 # -------------------------
-# GROUP BY SLOT
+# GROUP BY SLOT (FIXED)
 # -------------------------
 def group_by_slot(items):
     slots = {}
+
     for item in items:
-        slots.setdefault(item["slot"], []).append(item)
+        slot = item["slot"]
+
+        # allow 2 rings
+        if slot == "ring":
+            slots.setdefault("ring1", []).append(item)
+            slots.setdefault("ring2", []).append(item)
+        else:
+            slots.setdefault(slot, []).append(item)
+
     return slots
 
 
 # -------------------------
-# GUI APP
+# APPLY FOOD
+# -------------------------
+def apply_food(stats, food):
+    if not food:
+        return stats
+
+    result = stats.copy()
+
+    for stat, (pct, cap) in food.get("bonus", {}).items():
+        base = result.get(stat, 0)
+        bonus = min(int(base * pct), cap)
+        result[stat] = base + bonus
+
+    return result
+
+
+# -------------------------
+# GUI
 # -------------------------
 class App:
 
@@ -29,39 +55,48 @@ class App:
         self.root = root
         self.root.title("FFXIV Gear Solver")
 
-        # -------------------------
-        # UI
-        # -------------------------
         frame = ttk.Frame(root, padding=10)
         frame.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Min iLvl:").grid(row=0, column=0, sticky="w")
+        # -------------------------
+        # INPUTS
+        # -------------------------
+        ttk.Label(frame, text="Min iLvl:").grid(row=0, column=0)
         self.ilvl_entry = ttk.Entry(frame)
         self.ilvl_entry.insert(0, "780")
         self.ilvl_entry.grid(row=0, column=1)
 
-        ttk.Label(frame, text="Target GCD:").grid(row=1, column=0, sticky="w")
+        ttk.Label(frame, text="Target GCD:").grid(row=1, column=0)
         self.gcd_entry = ttk.Entry(frame)
         self.gcd_entry.insert(0, "2.38")
         self.gcd_entry.grid(row=1, column=1)
 
+        ttk.Label(frame, text="Food:").grid(row=2, column=0)
+
+        self.food_var = tk.StringVar()
+        self.food_dropdown = ttk.Combobox(frame, textvariable=self.food_var, state="readonly")
+        self.food_dropdown.grid(row=2, column=1)
+
         self.run_btn = ttk.Button(frame, text="Run Solver", command=self.start_solver)
-        self.run_btn.grid(row=2, column=0, columnspan=2, pady=5)
+        self.run_btn.grid(row=3, column=0, columnspan=2, pady=5)
 
         self.log_box = tk.Text(frame, height=25, width=100)
-        self.log_box.grid(row=3, column=0, columnspan=2, pady=10)
+        self.log_box.grid(row=4, column=0, columnspan=2)
 
-        # attach logger to GUI
         init_logger(self.log_box)
         set_widget(self.log_box)
 
         # -------------------------
-        # LOAD DATA ON START
+        # LOAD DATA
         # -------------------------
         log("[GUI] Starting application")
 
         self.foods = load_foods()
         log(f"[INIT] Foods loaded: {len(self.foods)}")
+
+        self.food_map = {f["name"]: f for f in self.foods}
+        self.food_dropdown["values"] = ["None"] + list(self.food_map.keys())
+        self.food_dropdown.current(0)
 
         self.items = load_items(min_ilvl=0)
         log(f"[INIT] Items loaded: {len(self.items)}")
@@ -75,7 +110,7 @@ class App:
         log("[GUI] Ready")
 
     # -------------------------
-    # RUN THREAD
+    # THREAD
     # -------------------------
     def start_solver(self):
         t = threading.Thread(target=self.run_solver)
@@ -83,13 +118,13 @@ class App:
 
     def run_solver(self):
         try:
-            # -------------------------
-            # INPUT
-            # -------------------------
             min_ilvl = int(self.ilvl_entry.get())
             target_gcd = float(self.gcd_entry.get())
+            food_name = self.food_var.get()
 
-            log(f"[RUN] Min iLvl={min_ilvl} | Target GCD={target_gcd}")
+            selected_food = self.food_map.get(food_name)
+
+            log(f"[RUN] Min iLvl={min_ilvl} | GCD={target_gcd} | Food={food_name}")
 
             # -------------------------
             # FILTER
@@ -101,6 +136,7 @@ class App:
                     continue
 
                 name = i["name"].lower()
+
                 if any(b in name for b in self.blacklist):
                     continue
 
@@ -117,12 +153,19 @@ class App:
                 log(f"[SLOT] {slot}: {len(arr)} items")
 
             # -------------------------
-            # SOLVER
+            # SOLVER (FIXED CALL)
             # -------------------------
             results = run_solver(items_by_slot, target_gcd, log)
 
             # -------------------------
-            # OUTPUT TOP 3
+            # APPLY FOOD TO RESULTS
+            # -------------------------
+            for r in results:
+                stats = r["result"]["stats"]
+                r["result"]["stats"] = apply_food(stats, selected_food)
+
+            # -------------------------
+            # OUTPUT
             # -------------------------
             log("\n=== TOP 3 BUILDS ===")
 
@@ -149,12 +192,9 @@ class App:
             log(traceback.format_exc())
 
 
-# -------------------------
-# ENTRY
-# -------------------------
 def main():
     root = tk.Tk()
-    app = App(root)
+    App(root)
     root.mainloop()
 
 
