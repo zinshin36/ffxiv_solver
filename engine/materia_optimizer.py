@@ -7,33 +7,37 @@ MATERIA_VALUES = {
     "sps": 36
 }
 
+STAT_KEYS = ["crit", "dh", "det", "sps"]
 
-def apply_materia(item, max_slots=2):
-    """
-    Generate all reasonable materia combinations for an item
-    """
-    stats = item["stats"]
+
+def get_max_slots(item):
+    base = item.get("materia_slots", 0)
+
+    # overmeld support
+    if item.get("is_overmeldable", True):
+        return base + 2
+
+    return base
+
+
+def apply_materia(item):
+    slots = get_max_slots(item)
+
+    base_stats = item["stats"]
 
     options = []
 
-    stat_keys = ["crit", "dh", "det", "sps"]
+    for combo in itertools.product(STAT_KEYS, repeat=slots):
 
-    # generate combinations like (crit, crit), (crit, dh), etc
-    for combo in itertools.product(stat_keys, repeat=max_slots):
-        new_stats = stats.copy()
-
+        stats = base_stats.copy()
         melds = []
 
         for stat in combo:
-            value = MATERIA_VALUES[stat]
-
-            # simple cap: don't exceed +2x base stat (prevents stupidity)
-            if new_stats[stat] < stats[stat] * 2:
-                new_stats[stat] += value
-                melds.append(f"{stat}+{value}")
+            stats[stat] += MATERIA_VALUES[stat]
+            melds.append(f"{stat}+{MATERIA_VALUES[stat]}")
 
         options.append({
-            "stats": new_stats,
+            "stats": stats,
             "melds": melds
         })
 
@@ -41,43 +45,31 @@ def apply_materia(item, max_slots=2):
 
 
 def optimize_materia_for_set(gear_set):
-    """
-    Try all materia combinations across full gear set
-    """
-    per_item_options = []
 
-    for item in gear_set:
-        per_item_options.append(apply_materia(item))
+    per_item = [apply_materia(i) for i in gear_set]
 
     best = None
     best_stats = None
     best_melds = None
 
-    # WARNING: this explodes combinatorially (you said that's OK)
-    for combo in itertools.product(*per_item_options):
+    for combo in itertools.product(*per_item):
 
-        total_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
-        meld_summary = []
+        total = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 0}
+        melds = []
 
         for item, result in zip(gear_set, combo):
-            for k in total_stats:
-                total_stats[k] += result["stats"].get(k, 0)
 
-            meld_summary.append({
+            for k in total:
+                total[k] += result["stats"].get(k, 0)
+
+            melds.append({
                 "item": item["name"],
                 "melds": result["melds"]
             })
 
-        if not best:
-            best = total_stats
-            best_stats = total_stats
-            best_melds = meld_summary
-            continue
-
-        # simple comparison (real DPS done later)
-        if total_stats["crit"] > best["crit"]:
-            best = total_stats
-            best_stats = total_stats
-            best_melds = meld_summary
+        if not best or total["crit"] > best["crit"]:
+            best = total
+            best_stats = total
+            best_melds = melds
 
     return best_stats, best_melds
