@@ -2,137 +2,173 @@ import tkinter as tk
 from tkinter import ttk
 import traceback
 
-from engine.logger import log, set_widget
-from engine.data_loader import load_items
+from engine.logger import log, init_logger
 from engine.food import load_foods
-from engine.blacklist import load_blacklist, is_blacklisted
+from engine.data_loader import load_items, load_materia
+from engine.blacklist import load_blacklist
 from engine.optimizer import run_solver
 
 
-def group_by_slot(items):
-    slots = {}
+class App:
 
-    for item in items:
-        slot = item["slot"]
+    def __init__(self, root):
+        self.root = root
+        self.root.title("FFXIV BLM BiS Solver")
 
-        if slot == "ring":
-            slots.setdefault("ring1", []).append(item)
-            slots.setdefault("ring2", []).append(item)
-        else:
-            slots.setdefault(slot, []).append(item)
+        # -------------------------
+        # UI VARIABLES
+        # -------------------------
+        self.min_ilvl_var = tk.StringVar(value="0")
+        self.gcd_var = tk.StringVar(value="")
+        self.food_var = tk.StringVar()
 
-    return slots
+        # -------------------------
+        # LAYOUT
+        # -------------------------
+        frame = ttk.Frame(root, padding=10)
+        frame.pack(fill="both", expand=True)
 
+        ttk.Label(frame, text="Min iLvl:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=self.min_ilvl_var, width=10).grid(row=0, column=1)
 
-def filter_items(items, min_ilvl, blacklist):
-    return [
-        x for x in items
-        if x["ilvl"] >= min_ilvl and not is_blacklisted(x["name"], blacklist)
-    ]
+        ttk.Label(frame, text="Target GCD (optional):").grid(row=1, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=self.gcd_var, width=10).grid(row=1, column=1)
 
+        ttk.Label(frame, text="Food:").grid(row=2, column=0, sticky="w")
+        self.food_dropdown = ttk.Combobox(frame, textvariable=self.food_var, state="readonly")
+        self.food_dropdown.grid(row=2, column=1, sticky="ew")
 
-def main():
+        ttk.Button(frame, text="Run Solver", command=self.run_solver).grid(row=3, column=0, columnspan=2, pady=5)
 
-    root = tk.Tk()
-    root.title("FFXIV BIS Solver")
+        self.log_box = tk.Text(frame, height=25, width=80)
+        self.log_box.grid(row=4, column=0, columnspan=2, pady=5)
+
+        frame.columnconfigure(1, weight=1)
+
+        # -------------------------
+        # INIT LOGGER
+        # -------------------------
+        init_logger(self.log_box)
+
+        log("[GUI] Starting application")
+
+        # -------------------------
+        # LOAD DATA
+        # -------------------------
+        self.foods = load_foods()
+        log(f"[INIT] Foods loaded: {len(self.foods)}")
+
+        self.items = load_items()
+        log(f"[INIT] Items loaded: {len(self.items)}")
+
+        self.max_ilvl = max(x["ilvl"] for x in self.items) if self.items else 0
+        log(f"[INIT] Max iLvl detected: {self.max_ilvl}")
+
+        self.materia = load_materia()
+        log(f"[INIT] Materia loaded: {len(self.materia)}")
+
+        self.blacklist = load_blacklist()
+        log(f"[INIT] Blacklist loaded: {len(self.blacklist)} entries")
+
+        # -------------------------
+        # FOOD DROPDOWN
+        # -------------------------
+        food_names = ["None"] + [f["name"] for f in self.foods]
+        self.food_dropdown["values"] = food_names
+
+        if food_names:
+            self.food_var.set(food_names[0])
+
+        log("[GUI] Ready")
 
     # -------------------------
-    # OUTPUT LOG WINDOW
+    # SOLVER
     # -------------------------
-    output = tk.Text(root, width=110, height=30)
-    output.pack()
-
-    set_widget(output)
-
-    log("[GUI] Starting application")
-
-    foods = load_foods()
-    items = load_items()
-    blacklist = load_blacklist()
-
-    max_ilvl = max(x["ilvl"] for x in items)
-
-    log(f"[INIT] Items loaded: {len(items)}")
-    log(f"[INIT] Max iLvl: {max_ilvl}")
-    log(f"[INIT] Blacklist: {len(blacklist)}")
-
-    # -------------------------
-    # INPUT UI
-    # -------------------------
-    frame = tk.Frame(root)
-    frame.pack()
-
-    tk.Label(frame, text="Min iLvl").grid(row=0, column=0)
-    ilvl_entry = tk.Entry(frame)
-    ilvl_entry.insert(0, str(max_ilvl))
-    ilvl_entry.grid(row=0, column=1)
-
-    tk.Label(frame, text="Target GCD").grid(row=1, column=0)
-    gcd_entry = tk.Entry(frame)
-    gcd_entry.insert(0, "2.2")
-    gcd_entry.grid(row=1, column=1)
-
-    tk.Label(frame, text="Food").grid(row=2, column=0)
-
-    food_names = ["None"] + [f["name"] for f in foods]
-    food_var = tk.StringVar(value="None")
-
-    dropdown = ttk.Combobox(frame, textvariable=food_var, values=food_names)
-    dropdown.grid(row=2, column=1)
-
-    # -------------------------
-    # RUN
-    # -------------------------
-    def run():
-
+    def run_solver(self):
         try:
-            min_ilvl = int(ilvl_entry.get())
-            target_gcd = float(gcd_entry.get())
-            selected_food = food_var.get()
+            min_ilvl = int(self.min_ilvl_var.get() or 0)
 
-            log(f"[RUN] iLvl={min_ilvl} | GCD={target_gcd} | Food={selected_food}")
+            target_gcd = None
+            if self.gcd_var.get().strip():
+                target_gcd = float(self.gcd_var.get())
 
-            filtered = filter_items(items, min_ilvl, blacklist)
+            selected_food = self.food_var.get()
 
-            log(f"[FILTER] {len(filtered)} items")
+            log(f"[RUN] Min iLvl={min_ilvl} | GCD={target_gcd} | Food={selected_food}")
 
-            slots = group_by_slot(filtered)
+            # -------------------------
+            # FILTER ITEMS
+            # -------------------------
+            filtered = [
+                x for x in self.items
+                if x["ilvl"] >= min_ilvl
+                and not any(b in x["name"].lower() for b in self.blacklist)
+            ]
+
+            log(f"[FILTER] Items after filter: {len(filtered)}")
+
+            # -------------------------
+            # GROUP BY SLOT
+            # -------------------------
+            slots = {}
+            for item in filtered:
+                slot = item["slot"]
+
+                if slot == "ring":
+                    slots.setdefault("ring1", []).append(item)
+                    slots.setdefault("ring2", []).append(item)
+                else:
+                    slots.setdefault(slot, []).append(item)
 
             for s in slots:
-                log(f"[SLOT] {s}: {len(slots[s])}")
+                log(f"[SLOT] {s}: {len(slots[s])} items")
 
-            # food bonus
-            food_bonus = {}
-            for f in foods:
-                if f["name"] == selected_food:
-                    food_bonus = f["bonus"]
+            # -------------------------
+            # RUN SOLVER
+            # -------------------------
+            results = run_solver(
+                items_by_slot=slots,
+                materia_csv=self.materia,
+                config={
+                    "target_gcd": target_gcd,
+                    "food": selected_food,
+                    "foods": self.foods
+                },
+                logger=log
+            )
 
-            results = run_solver(slots, target_gcd, food_bonus, log)
+            # -------------------------
+            # DISPLAY RESULTS
+            # -------------------------
+            log("\n===== RESULTS =====\n")
 
-            output.insert("end", "\n\n===== RESULTS =====\n")
-
-            for i, r in enumerate(results):
+            for i, r in enumerate(results[:3]):
+                build = r["build"]
                 res = r["result"]
+                stats = res.get("stats", {})
 
-                output.insert("end", f"\n=== BUILD {i+1} ===\n")
-                output.insert("end", f"DPS: {res['dps']:.2f}\n")
-                output.insert("end", f"GCD: {res['gcd']}\n")
+                log(f"=== BUILD {i+1} ===")
+                log(f"DPS: {res['dps']:.2f}")
+                log(f"GCD: {res['gcd']:.3f}")
+                log(f"CRIT: {stats.get('crit',0)}  DH: {stats.get('dh',0)}  DET: {stats.get('det',0)}  SPS: {stats.get('sps',0)}\n")
 
-                s = res["stats"]
-                output.insert("end", f"CRIT: {s['crit']}  DH: {s['dh']}  DET: {s['det']}  SPS: {s['sps']}\n\n")
+                for slot, item in build.items():
+                    log(f"{slot}: {item['name']}")
 
-                for slot, item in r["build"].items():
-                    output.insert("end", f"{slot}: {item['name']}\n")
+                log("")
 
         except Exception as e:
-            log("[CRASH]")
+            log("[CRASH DETECTED]")
             log(str(e))
             log(traceback.format_exc())
 
-    tk.Button(frame, text="Run Solver", command=run).grid(row=3, columnspan=2)
 
-    log("[GUI] Ready")
-
+# -------------------------
+# ENTRY POINT
+# -------------------------
+def main():
+    root = tk.Tk()
+    app = App(root)
     root.mainloop()
 
 
