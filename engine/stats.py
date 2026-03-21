@@ -1,35 +1,45 @@
-from engine.blm_math import gcd_from_sps
+from engine.dps_model import compute_dps, gcd_from_sps
 
-# DPS weights
-STAT_WEIGHTS_CRIT = {"crit": 1.0, "dh": 0.9, "det": 0.8, "sps": 0.7}
-STAT_WEIGHTS_SPS = {"crit": 0.9, "dh": 0.8, "det": 0.7, "sps": 1.0}
+BASE_STATS = {
+    'hp': 4862,
+    'int': 531,
+    'crit': 420,
+    'dh': 420,
+    'det': 440,
+    'sps': 420
+}
 
-def calculate_build_stats(build, food=None, build_type="Crit"):
-    stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 531}  # default base INT
+def calculate_build_stats(build, food=None, foods=None):
 
-    # add item stats + melds
+    stats = BASE_STATS.copy()
+
+    # Add gear stats
     for item in build.values():
-        for k, v in item.get("stats", {}).items():
-            stats[k] = stats.get(k, 0) + v
-        for k, v in item.get("melds", {}).items():
-            stats[k] = stats.get(k, 0) + v
+        for k, v in item["stats"].items():
+            stats[k] += v
 
-    # apply food
-    if food:
-        for k, v in food.get("stats", {}).items():
-            stats[k] = stats.get(k, 0) + v
+        # Apply melds
+        for stat, value in item.get("melds", {}).items():
+            stats[stat] += value
 
-    # GCD from SPS
-    stats["gcd"] = gcd_from_sps(stats.get("sps", 0))
+    # Apply food
+    if food and foods:
+        for f in foods:
+            if f["name"] == food:
+                for k, v in f["stats"].items():
+                    stats[k] += v
 
-    # DPS calculation based on build type
-    weights = STAT_WEIGHTS_CRIT if build_type.lower() == "crit" else STAT_WEIGHTS_SPS
-    stats["dps"] = sum(stats.get(k, 0) * w for k, w in weights.items())
+    # Compute GCD + DPS
+    stats["gcd"] = gcd_from_sps(stats["sps"])
+    stats["dps"] = compute_dps(stats)
+
     return stats
 
+
 def cap_stats(stats):
-    stats['crit'] = min(stats.get('crit', 0), 3600)
-    stats['dh'] = min(stats.get('dh', 0), 3500)
-    stats['det'] = min(stats.get('det', 0), 3500)
-    stats['sps'] = min(stats.get('sps', 0), 3600)
+    # prevent absurd overflow
+    stats["crit"] = min(stats["crit"], 4000)
+    stats["dh"] = min(stats["dh"], 4000)
+    stats["det"] = min(stats["det"], 4000)
+    stats["sps"] = min(stats["sps"], 4000)
     return stats
