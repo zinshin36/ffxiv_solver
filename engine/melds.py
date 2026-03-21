@@ -1,17 +1,21 @@
+MATERIA_VALUE = 36
+
 def generate_melded_stats(item, build_type="Crit"):
-    melds = {}
+
     slots = item.get("materia_slots", 0)
+
+    melds = {}
+
     if slots <= 0:
         return melds
 
-    stat_priority = []
     if build_type == "Crit":
-        stat_priority = ["crit", "dh", "det", "sps"]
+        priority = ["crit", "det", "dh"]
     else:
-        stat_priority = ["sps", "crit", "det", "dh"]
+        priority = ["sps", "crit", "det"]
 
     for i in range(slots):
-        stat = stat_priority[i % len(stat_priority)]
-        melds[stat] = melds.get(stat, 0) + 36  # standard materia value
+        stat = priority[i % len(priority)]
+        melds[stat] = melds.get(stat, 0) + MATERIA_VALUE
 
     return melds
