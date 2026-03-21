@@ -1,48 +1,53 @@
-import json
 import os
-from engine.logger import log
+import json
 from engine.runtime_paths import GAME_DATA_DIR
-
-FOODS = {}
+from engine.logger import log
 
 def load_foods():
-    global FOODS
     path = os.path.join(GAME_DATA_DIR, "foods.json")
-    foods = []
+
     if not os.path.exists(path):
-        log("[FOOD] foods.json not found")
-        return foods
+        log("[FOOD] foods.json NOT FOUND")
+        return []
 
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            for entry in data:
-                try:
-                    # convert flat stats to dict for consistency
-                    bonus = {}
-                    for stat in ["crit", "dh", "det", "sps", "int"]:
-                        if stat in entry:
-                            bonus[stat] = entry[stat]
-                    foods.append({
-                        "name": entry.get("name", ""),
-                        "stats": bonus,
-                        "duration": entry.get("duration", 0)
-                    })
-                except Exception as e:
-                    log(f"[FOOD] Failed to parse entry: {e}")
+
+        foods = []
+
+        for entry in data:
+            stats = {}
+
+            for stat in ["crit", "dh", "det", "sps"]:
+                if stat in entry:
+                    stats[stat] = int(entry[stat])
+
+            foods.append({
+                "name": entry.get("name", "Unknown"),
+                "stats": stats
+            })
+
+        log(f"[FOOD] Loaded {len(foods)} foods from foods.json")
+        return foods
+
     except Exception as e:
         log(f"[FOOD] Failed to load foods.json: {e}")
+        return []
 
-    FOODS = {f['name']: f for f in foods}
-    log(f"[FOOD] Loaded {len(foods)} foods")
-    return foods
 
-def apply_food(stats, food_name):
-    if not FOODS or food_name not in FOODS:
-        return stats.copy()
+def apply_food(stats, food_name, foods):
 
-    buff = FOODS[food_name]["stats"]
-    result = stats.copy()
-    for stat, value in buff.items():
-        result[stat] = result.get(stat, 0) + value
-    return result
+    if not food_name or food_name == "None":
+        return stats
+
+    for food in foods:
+        if food["name"] == food_name:
+            result = stats.copy()
+
+            for stat, val in food["stats"].items():
+                result[stat] = result.get(stat, 0) + val
+
+            return result
+
+    return stats
