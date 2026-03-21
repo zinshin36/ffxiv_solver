@@ -1,47 +1,50 @@
-# engine/stats.py
-
-def calc_stats(base_stats, gear_stats, food=None):
+def apply_food_stats(base_stats, food_stats):
     """
-    Calculate final stats after gear and food.
-    base_stats: dict with base character stats (crit, dh, det, sps, etc.)
-    gear_stats: dict with gear contributions
-    food: optional dict of stat bonuses
+    Apply food bonuses to base stats.
+    base_stats: dict with keys "crit", "dh", "det", "sps"
+    food_stats: dict with same keys
+    Returns a new dict with combined stats
     """
-    final_stats = base_stats.copy()
+    result = base_stats.copy()
+    for stat, value in food_stats.items():
+        if stat in result:
+            result[stat] += value
+        else:
+            result[stat] = value
+    return result
 
-    # Apply gear stats
-    for stat, value in gear_stats.items():
-        final_stats[stat] = final_stats.get(stat, 0) + value
-
-    # Apply food stats
-    if food:
-        for stat, value in food.items():
-            final_stats[stat] = final_stats.get(stat, 0) + value
-
-    return final_stats
-
-def calc_gcd(det, gcd_base=2.5):
+def compute_gcd(gcd_base, det):
     """
-    Calculate GCD based on DET (Determination) stat.
-    Formula: GCD = gcd_base * 1000 / (1000 + DET)
+    Compute actual GCD based on DET stat
+    Example formula: gcd = gcd_base * (1000 / (1000 + det))
     """
-    return gcd_base * 1000 / (1000 + det)
+    return gcd_base * (1000 / (1000 + det))
 
-def calc_dps(stats, gcd=None, build_type="Crit"):
+def compute_dps(stats, gcd, build_type="Crit"):
     """
-    Simplified DPS calculation based on stats.
-    build_type can prioritize Crit or SPS (Spell Speed)
+    Simplified DPS calculation for the purpose of the solver.
+    stats: dict containing crit, dh, det, sps
+    gcd: float, current gcd
+    build_type: string, "Crit" or "Spell Speed"
+    Returns DPS float
     """
     crit = stats.get("crit", 0)
     dh = stats.get("dh", 0)
     det = stats.get("det", 0)
     sps = stats.get("sps", 0)
 
-    # Base DPS modifier
-    dps = 1.0 + (crit / 1000) + (dh / 1000) + (det / 1000)
-    
-    # If build_type is SPS, slightly weight GCD
-    if build_type.lower() == "spell speed" and gcd:
-        dps *= 2.5 / gcd  # faster GCD -> higher effective DPS
+    # Base multipliers (can tweak for balance)
+    base_dps = 1000
+
+    # DPS contribution formula (simplified)
+    crit_factor = 1 + crit / 1000
+    dh_factor = 1 + dh / 1000
+    det_factor = 1 + det / 1000
+    sps_factor = 1 + sps / 1000
+
+    if build_type.lower() == "crit":
+        dps = base_dps * crit_factor * dh_factor * det_factor / gcd
+    else:  # Spell Speed focus
+        dps = base_dps * sps_factor * dh_factor * det_factor / gcd
 
     return dps
