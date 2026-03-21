@@ -19,13 +19,19 @@ def run_solver(items_by_slot, min_ilvl=0, target_gcd=2.5, build_type="Crit", sel
     # Prepare filtered items per slot
     filtered_items = {}
     for slot, items in items_by_slot.items():
-        filtered_items[slot] = [i for i in items if i['ilvl'] >= min_ilvl and i['name'] not in blacklist]
+        slot_items = []
+        for i in items:
+            ilvl = i.get("ilvl", 0)  # default 0 if missing
+            if ilvl >= min_ilvl and i.get('name') not in blacklist:
+                slot_items.append(i)
+        filtered_items[slot] = slot_items
         if not filtered_items[slot]:
-            raise ValueError(f"No valid items in slot {slot} after filtering")
+            print(f"[WARN] No valid items in slot {slot} after filtering. Check ilvl field!")
+            continue
 
     # Generate all possible builds (cartesian product)
     all_slots = sorted(filtered_items.keys())
-    all_combinations = itertools.product(*(filtered_items[slot] for slot in all_slots))
+    all_combinations = itertools.product(*(filtered_items[slot] for slot in all_slots if filtered_items[slot]))
 
     results = []
     for combo in all_combinations:
