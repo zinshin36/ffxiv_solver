@@ -1,40 +1,65 @@
-import itertools
-from engine.stats import calculate_build_stats, cap_stats
-from engine.melds import generate_melded_stats
+# engine/optimizer.py
 
-def run_solver(items_by_slot, min_ilvl=0, target_gcd=None, build_type="Crit", selected_food=None, blacklist=None):
-    all_slots = ["weapon","head","body","hands","legs","feet","earrings","necklace","bracelet","ring1","ring2"]
-    slot_items = [items_by_slot[slot] for slot in all_slots]
+from itertools import product
+from engine.stats import calc_stats, calc_gcd, calc_dps
+from engine.food_system import apply_food
 
-    best_builds = []
-    total_combinations = 1
-    for items in slot_items:
-        total_combinations *= len(items)
+def run_solver(items_by_slot, min_ilvl=0, target_gcd=2.5, build_type="Crit", selected_food=None, blacklist=None):
+    """
+    Run the BIS optimizer.
+    items_by_slot: dict mapping slots -> list of item dicts
+    selected_food: dict with food stats
+    blacklist: set of item names to exclude
+    """
 
-    if total_combinations > 10**7:  # cap for performance
-        slot_items = [items[:10] for items in slot_items]
+    if blacklist is None:
+        blacklist = set()
 
-    for combo in itertools.product(*slot_items):
-        build = {slot: item.copy() for slot, item in zip(all_slots, combo)}
+    # Filter items based on blacklist & min ilvl
+    filtered_items = {}
+    for slot, items in items_by_slot.items():
+        filtered_items[slot] = [
+            i for i in items if i['name'] not in blacklist and i['ilvl'] >= min_ilvl
+        ]
 
-        # generate melds per item
-        for slot_name, item in build.items():
-            item['melds'] = generate_melded_stats(item, build_type)
+    # Prepare slot order for combinations
+    slots = list(filtered_items.keys())
+    all_combinations = product(*(filtered_items[slot] for slot in slots))
 
-        stats = calculate_build_stats(build, selected_food)
-        stats = cap_stats(stats)
+    results = []
 
-        build_entry = {
-            'items': build,
-            'dps': stats['dps'],
-            'gcd': stats['gcd'],
-            'crit': stats['crit'],
-            'dh': stats['dh'],
-            'det': stats['det'],
-            'sps': stats['sps']
-        }
+    base_stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0}  # Can add more base stats if needed
 
-        best_builds.append(build_entry)
+    for combo in all_combinations:
+        gear_stats = {}
+        combo_dict = {}
+        for idx, slot in enumerate(slots):
+            item = combo[idx]
+            combo_dict[slot] = item
+            for stat in ["crit", "dh", "det", "sps"]:
+                gear_stats[stat] = gear_stats.get(stat, 0) + item.get(stat, 0)
 
-    best_builds.sort(key=lambda x: x['dps'], reverse=True)
-    return best_builds[:3]
+        # Apply food
+        food_stats = {}
+        if selected_food:
+            for stat in ["crit", "dh", "det", "sps"]:
+                if stat in selected_food:
+                    food_stats[stat] = selected_food[stat]
+
+        final_stats = calc_stats(base_stats, gear_stats, food_stats)
+        gcd = calc_gcd(final_stats["det"], target_gcd)
+        dps = calc_dps(final_stats, gcd=gcd, build_type=build_type)
+
+        results.append({
+            "dps": dps,
+            "gcd": gcd,
+            "crit": final_stats["crit"],
+            "dh": final_stats["dh"],
+            "det": final_stats["det"],
+            "sps": final_stats["sps"],
+            "items": combo_dict
+        })
+
+    # Sort by DPS descending
+    results.sort(key=lambda x: x["dps"], reverse=True)
+    return results[:5]  # Top 5 builds
