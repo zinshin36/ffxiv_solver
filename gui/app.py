@@ -1,114 +1,96 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-import os
-from engine.optimizer import run_solver
+from tkinter import ttk
 from engine.data_loader import load_items
-from engine.food_system import load_foods, apply_food
+from engine.optimizer import run_solver
+from engine.food_system import load_foods
 
-BLACKLIST_FILE = "blacklist.txt"
+SLOTS = [
+    "weapon","head","body","hands","legs",
+    "feet","earrings","necklace","bracelet","ring1","ring2"
+]
+
+def build_items_by_slot(items):
+    slots = {s: [] for s in SLOTS}
+
+    for item in items:
+        slot = item["slot"]
+
+        if slot == "ring":
+            slots["ring1"].append(item)
+            slots["ring2"].append(item)
+        elif slot in slots:
+            slots[slot].append(item)
+
+    return slots
+
 
 class App:
-    def __init__(self, root, items_by_slot):
+
+    def __init__(self, root):
+
         self.root = root
         self.root.title("FFXIV BIS Solver")
-        self.items_by_slot = items_by_slot
+
+        self.items = load_items()
+        self.items_by_slot = build_items_by_slot(self.items)
         self.foods = load_foods()
-        self.blacklist = self.load_blacklist()
-        self.build_type = tk.StringVar(value="Crit")  # default build type
-        self.min_ilvl = tk.IntVar(value=0)
+
         self.gcd = tk.DoubleVar(value=2.5)
-        self.selected_food = tk.StringVar()
-        if self.foods:
-            self.selected_food.set(self.foods[0]['name'])
-        self.create_gui()
+        self.build_type = tk.StringVar(value="Crit")
+        self.food = tk.StringVar(value=self.foods[0]["name"] if self.foods else "None")
 
-    def load_blacklist(self):
-        if os.path.exists(BLACKLIST_FILE):
-            with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
-                return set(line.strip() for line in f if line.strip())
-        return set()
+        self.create_ui()
 
-    def create_gui(self):
+    def create_ui(self):
+
         frame = ttk.Frame(self.root)
         frame.pack(padx=10, pady=10)
 
-        ttk.Label(frame, text="Min iLvl:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.min_ilvl).grid(row=0, column=1)
+        ttk.Label(frame, text="Target GCD").grid(row=0, column=0)
+        ttk.Entry(frame, textvariable=self.gcd).grid(row=0, column=1)
 
-        ttk.Label(frame, text="Target GCD:").grid(row=1, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.gcd).grid(row=1, column=1)
+        ttk.Label(frame, text="Build Type").grid(row=1, column=0)
+        ttk.OptionMenu(frame, self.build_type, "Crit", "Crit", "Spell Speed").grid(row=1, column=1)
 
-        ttk.Label(frame, text="Food:").grid(row=2, column=0, sticky="w")
-        food_menu = ttk.OptionMenu(frame, self.selected_food, self.selected_food.get(),
-                                   *[f['name'] for f in self.foods])
-        food_menu.grid(row=2, column=1)
+        ttk.Label(frame, text="Food").grid(row=2, column=0)
+        ttk.OptionMenu(frame, self.food, self.food.get(), *[f["name"] for f in self.foods]).grid(row=2, column=1)
 
-        ttk.Label(frame, text="Build Type:").grid(row=3, column=0, sticky="w")
-        ttk.OptionMenu(frame, self.build_type, self.build_type.get(), "Crit", "Spell Speed").grid(row=3, column=1)
+        ttk.Button(frame, text="Solve", command=self.solve).grid(row=3, column=0, columnspan=2)
 
-        run_btn = ttk.Button(frame, text="Run Solver", command=self.run_solver_gui)
-        run_btn.grid(row=4, column=0, columnspan=2, pady=10)
+        self.output = tk.Text(self.root, width=100, height=30)
+        self.output.pack()
 
-        self.log = tk.Text(self.root, height=25, width=100)
-        self.log.pack()
+    def log(self, msg):
+        self.output.insert("end", msg + "\n")
+        self.output.see("end")
 
-    def log_msg(self, msg):
-        self.log.insert(tk.END, f"{msg}\n")
-        self.log.see(tk.END)
-        self.root.update_idletasks()
+    def solve(self):
 
-    def run_solver_gui(self):
-        if not self.items_by_slot:
-            messagebox.showerror("Error", "No items loaded.")
-            return
-        self.log_msg(f"[RUN] Min iLvl={self.min_ilvl.get()} | GCD={self.gcd.get()} | Food={self.selected_food.get()} | Build Type={self.build_type.get()}")
-        filtered_items = self.filter_items()
-        self.log_msg(f"[FILTER] Items after filter: {sum(len(v) for v in filtered_items.values())}")
-        for slot, items in filtered_items.items():
-            self.log_msg(f"[SLOT] {slot}: {len(items)} items")
+        self.output.delete("1.0", tk.END)
 
-        try:
-            results = run_solver(
-                items_by_slot=filtered_items,
-                min_ilvl=self.min_ilvl.get(),
-                target_gcd=self.gcd.get(),
-                build_type=self.build_type.get(),
-                selected_food=self.selected_food.get(),
-                blacklist=self.blacklist,
-            )
-            self.display_results(results)
-        except Exception as e:
-            self.log_msg(f"[CRASH DETECTED]\n{e}")
+        results = run_solver(
+            self.items_by_slot,
+            target_gcd=self.gcd.get(),
+            build_type=self.build_type.get(),
+            selected_food=self.food.get(),
+            foods=self.foods
+        )
 
-    def filter_items(self):
-        filtered = {}
-        for slot, items in self.items_by_slot.items():
-            filtered[slot] = [
-                i for i in items
-                if i['name'] not in self.blacklist and i['ilvl'] >= self.min_ilvl.get()
-            ]
-        return filtered
+        for i, b in enumerate(results, 1):
+            self.log(f"\n=== BUILD {i} ===")
+            self.log(f"DPS: {b['dps']:.2f} | GCD: {b['gcd']:.3f}")
+            self.log(f"CRIT:{b['crit']} DH:{b['dh']} DET:{b['det']} SPS:{b['sps']}")
 
-    def display_results(self, builds):
-        self.log_msg("===== RESULTS =====")
-        for i, build in enumerate(builds, 1):
-            self.log_msg(f"\n=== BUILD {i} ===")
-            self.log_msg(f"DPS: {build['dps']:.2f}")
-            self.log_msg(f"GCD: {build['gcd']:.3f}")
-            self.log_msg(f"CRIT: {build['crit']}  DH: {build['dh']}  DET: {build['det']}  SPS: {build['sps']}")
-            for slot in ["weapon","head","body","hands","legs","feet","earrings","necklace","bracelet","ring1","ring2"]:
-                item = build['items'][slot]
-                self.log_msg(f"{slot}: {item['name']}")
-                if item.get('melds'):
-                    melds = ', '.join([f"{k}+{v}" for k,v in item['melds'].items()])
-                    self.log_msg(f"  melds: {melds}")
+            for slot in SLOTS:
+                item = b["items"][slot]
+                self.log(f"{slot}: {item['name']}")
 
-def main(items_by_slot=None):
-    if items_by_slot is None:
-        items_by_slot = load_items()
+                if item.get("melds"):
+                    melds = ", ".join([f"{k}+{v}" for k,v in item["melds"].items()])
+                    self.log(f"  melds: {melds}")
+
+
+def main():
     root = tk.Tk()
-    app = App(root, items_by_slot)
+    App(root)
     root.mainloop()
-
-if __name__ == "__main__":
-    main()
