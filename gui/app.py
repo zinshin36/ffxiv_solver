@@ -1,9 +1,12 @@
+# gui/app.py
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import os
 from engine.optimizer import run_solver
 from engine.data_loader import load_items
 from engine.food import load_foods
+from engine.food_system import apply_food
 
 BLACKLIST_FILE = "blacklist.txt"
 
@@ -14,12 +17,14 @@ class App:
         self.items_by_slot = items_by_slot
         self.foods = load_foods()
         self.blacklist = self.load_blacklist()
-        self.build_type = tk.StringVar(value="Crit")
+        self.build_type = tk.StringVar(value="Crit")  # Default build type
+
         self.min_ilvl = tk.IntVar(value=0)
         self.gcd = tk.DoubleVar(value=2.5)
         self.selected_food = tk.StringVar()
         if self.foods:
             self.selected_food.set(self.foods[0]['name'])
+
         self.create_gui()
 
     def load_blacklist(self):
@@ -61,18 +66,22 @@ class App:
         if not self.items_by_slot:
             messagebox.showerror("Error", "No items loaded.")
             return
+
+        selected_food_obj = next((f for f in self.foods if f["name"] == self.selected_food.get()), None)
+
         self.log_msg(f"[RUN] Min iLvl={self.min_ilvl.get()} | GCD={self.gcd.get()} | Food={self.selected_food.get()} | Build Type={self.build_type.get()}")
         filtered_items = self.filter_items()
         self.log_msg(f"[FILTER] Items after filter: {sum(len(v) for v in filtered_items.values())}")
         for slot, items in filtered_items.items():
             self.log_msg(f"[SLOT] {slot}: {len(items)} items")
+
         try:
             results = run_solver(
                 items_by_slot=filtered_items,
                 min_ilvl=self.min_ilvl.get(),
                 target_gcd=self.gcd.get(),
                 build_type=self.build_type.get(),
-                selected_food=self.selected_food.get(),
+                selected_food=selected_food_obj,
                 blacklist=self.blacklist,
             )
             self.display_results(results)
