@@ -1,35 +1,12 @@
-FOODS = {
-
-    "None": {},
-
-    "Raid Food":
-
-    {
-        "crit": (0.10, 120),
-        "det": (0.10, 120)
-    },
-
-    "Spell Speed Food":
-
-    {
-        "sps": (0.10, 120),
-        "crit": (0.05, 80)
-    }
-}
-
-
 def apply_food(stats, food):
+    """
+    Apply a food buff to the given stats dictionary.
+    'food' must be a dict with a 'stats' key containing stat bonuses.
+    """
+    if not food or "stats" not in food:
+        return stats
 
-    buff = FOODS.get(food, {})
-
-    result = dict(stats)
-
-    for stat, (pct, cap) in buff.items():
-
-        base = result.get(stat, 0)
-
-        bonus = min(int(base * pct), cap)
-
-        result[stat] = base + bonus
-
-    return result
+    new_stats = stats.copy()
+    for stat, value in food["stats"].items():
+        new_stats[stat] = new_stats.get(stat, 0) + value
+    return new_stats
