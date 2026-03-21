@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 import os
 from engine.optimizer import run_solver
 from engine.data_loader import load_items
-from engine.food_system import load_foods, get_food_stats
+from engine.food_system import load_foods
 
 BLACKLIST_FILE = "blacklist.txt"
 
@@ -12,15 +12,15 @@ class App:
         self.root = root
         self.root.title("FFXIV BIS Solver")
         self.items_by_slot = items_by_slot
-        self.foods = load_foods()  # load from foods.json
+        self.foods = load_foods()
         self.blacklist = self.load_blacklist()
-        self.build_type = tk.StringVar(value="Crit")  # Default build type
+        self.build_type = tk.StringVar(value="Crit")
 
         self.min_ilvl = tk.IntVar(value=0)
         self.gcd = tk.DoubleVar(value=2.5)
         self.selected_food = tk.StringVar()
         if self.foods:
-            self.selected_food.set(list(self.foods.keys())[0])
+            self.selected_food.set(self.foods[0]['name'])
 
         self.create_gui()
 
@@ -42,7 +42,7 @@ class App:
 
         ttk.Label(frame, text="Food:").grid(row=2, column=0, sticky="w")
         food_menu = ttk.OptionMenu(frame, self.selected_food, self.selected_food.get(),
-                                   *self.foods.keys())
+                                   *[f['name'] for f in self.foods])
         food_menu.grid(row=2, column=1)
 
         ttk.Label(frame, text="Build Type:").grid(row=3, column=0, sticky="w")
@@ -63,6 +63,8 @@ class App:
         if not self.items_by_slot:
             messagebox.showerror("Error", "No items loaded.")
             return
+        # get selected food dict
+        food = next((f for f in self.foods if f['name'] == self.selected_food.get()), None)
 
         self.log_msg(f"[RUN] Min iLvl={self.min_ilvl.get()} | GCD={self.gcd.get()} | Food={self.selected_food.get()} | Build Type={self.build_type.get()}")
         filtered_items = self.filter_items()
@@ -76,7 +78,7 @@ class App:
                 min_ilvl=self.min_ilvl.get(),
                 target_gcd=self.gcd.get(),
                 build_type=self.build_type.get(),
-                selected_food=get_food_stats(self.selected_food.get()),
+                selected_food=food,
                 blacklist=self.blacklist,
             )
             self.display_results(results)
@@ -97,11 +99,12 @@ class App:
             self.log_msg(f"GCD: {build['gcd']:.3f}")
             self.log_msg(f"CRIT: {build['crit']}  DH: {build['dh']}  DET: {build['det']}  SPS: {build['sps']}")
             for slot in ["weapon","head","body","hands","legs","feet","earrings","necklace","bracelet","ring1","ring2"]:
-                item = build['items'][slot]
-                self.log_msg(f"{slot}: {item['name']}")
-                if item.get('melds'):
-                    melds = ', '.join([f"{k}+{v}" for k,v in item['melds'].items()])
-                    self.log_msg(f"  melds: {melds}")
+                item = build['items'].get(slot)
+                if item:
+                    self.log_msg(f"{slot}: {item['name']}")
+                    if item.get('melds'):
+                        melds = ', '.join([f"{k}+{v}" for k,v in item['melds'].items()])
+                        self.log_msg(f"  melds: {melds}")
 
 def main(items_by_slot=None):
     if items_by_slot is None:
