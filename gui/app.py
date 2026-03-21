@@ -1,12 +1,9 @@
-# gui/app.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import os
 from engine.optimizer import run_solver
 from engine.data_loader import load_items
-from engine.food import load_foods
-from engine.food_system import apply_food
+from engine.food_system import load_foods, get_food_stats
 
 BLACKLIST_FILE = "blacklist.txt"
 
@@ -15,7 +12,7 @@ class App:
         self.root = root
         self.root.title("FFXIV BIS Solver")
         self.items_by_slot = items_by_slot
-        self.foods = load_foods()
+        self.foods = load_foods()  # load from foods.json
         self.blacklist = self.load_blacklist()
         self.build_type = tk.StringVar(value="Crit")  # Default build type
 
@@ -23,7 +20,7 @@ class App:
         self.gcd = tk.DoubleVar(value=2.5)
         self.selected_food = tk.StringVar()
         if self.foods:
-            self.selected_food.set(self.foods[0]['name'])
+            self.selected_food.set(list(self.foods.keys())[0])
 
         self.create_gui()
 
@@ -45,7 +42,7 @@ class App:
 
         ttk.Label(frame, text="Food:").grid(row=2, column=0, sticky="w")
         food_menu = ttk.OptionMenu(frame, self.selected_food, self.selected_food.get(),
-                                   *[f['name'] for f in self.foods])
+                                   *self.foods.keys())
         food_menu.grid(row=2, column=1)
 
         ttk.Label(frame, text="Build Type:").grid(row=3, column=0, sticky="w")
@@ -67,8 +64,6 @@ class App:
             messagebox.showerror("Error", "No items loaded.")
             return
 
-        selected_food_obj = next((f for f in self.foods if f["name"] == self.selected_food.get()), None)
-
         self.log_msg(f"[RUN] Min iLvl={self.min_ilvl.get()} | GCD={self.gcd.get()} | Food={self.selected_food.get()} | Build Type={self.build_type.get()}")
         filtered_items = self.filter_items()
         self.log_msg(f"[FILTER] Items after filter: {sum(len(v) for v in filtered_items.values())}")
@@ -81,7 +76,7 @@ class App:
                 min_ilvl=self.min_ilvl.get(),
                 target_gcd=self.gcd.get(),
                 build_type=self.build_type.get(),
-                selected_food=selected_food_obj,
+                selected_food=get_food_stats(self.selected_food.get()),
                 blacklist=self.blacklist,
             )
             self.display_results(results)
