@@ -1,41 +1,34 @@
+# engine/food_system.py
+
 import json
 import os
-from engine.logger import log
-from engine.runtime_paths import GAME_DATA_DIR
 
-FOOD_FILE = os.path.join(GAME_DATA_DIR, "foods.json")
+class FoodSystem:
+    def __init__(self, game_data_path="game_data/foods.json"):
+        self.game_data_path = game_data_path
+        self.foods = self.load_foods()
 
-def load_foods():
-    foods = []
+    def load_foods(self):
+        if not os.path.exists(self.game_data_path):
+            print(f"[ERROR] foods.json not found at {self.game_data_path}")
+            return []
+        with open(self.game_data_path, "r", encoding="utf-8") as f:
+            try:
+                foods = json.load(f)
+                return foods
+            except json.JSONDecodeError as e:
+                print(f"[ERROR] Failed to parse foods.json: {e}")
+                return []
 
-    if not os.path.exists(FOOD_FILE):
-        log("[FOOD] foods.json not found")
-        return foods
-
-    try:
-        with open(FOOD_FILE, encoding="utf-8") as f:
-            data = json.load(f)
-            for entry in data:
-                stats = {}
-                for key in ["crit", "dh", "det", "sps"]:
-                    if key in entry:
-                        stats[key] = entry[key]
-                foods.append({
-                    "name": entry.get("name", ""),
-                    "stats": stats
-                })
-    except Exception as e:
-        log(f"[FOOD] Failed to load foods.json: {e}")
-
-    log(f"[FOOD] Loaded {len(foods)} foods")
-    return foods
-
-def apply_food(stats, food):
-    if not food:
-        return stats.copy()
-
-    buff = food.get("stats", {})
-    result = dict(stats)
-    for stat, value in buff.items():
-        result[stat] = result.get(stat, 0) + value
-    return result
+    def get_food_bonus(self, food_name):
+        """Return the stat bonus for a given food name."""
+        for food in self.foods:
+            if food.get("name") == food_name:
+                return {
+                    "crit": food.get("crit", 0),
+                    "dh": food.get("dh", 0),
+                    "det": food.get("det", 0),
+                    "sps": food.get("sps", 0)
+                }
+        # Default to no bonus if food not found
+        return {"crit": 0, "dh": 0, "det": 0, "sps": 0}
