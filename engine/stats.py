@@ -1,31 +1,47 @@
-from engine.dps_model import compute_dps, gcd_from_sps
-from engine.food_system import apply_food
+# engine/stats.py
 
-def calculate_build_stats(build, selected_food=None):
-    stats = {"crit":0, "dh":0, "det":0, "sps":0, "int":531}  # base int for BLM
+def calc_stats(base_stats, gear_stats, food=None):
+    """
+    Calculate final stats after gear and food.
+    base_stats: dict with base character stats (crit, dh, det, sps, etc.)
+    gear_stats: dict with gear contributions
+    food: optional dict of stat bonuses
+    """
+    final_stats = base_stats.copy()
 
-    # Apply items and melds
-    for item in build.values():
-        for k,v in item.get("stats", {}).items():
-            stats[k] = stats.get(k, 0) + v
-        for k,v in item.get("melds", {}).items():
-            stats[k] = stats.get(k, 0) + v
+    # Apply gear stats
+    for stat, value in gear_stats.items():
+        final_stats[stat] = final_stats.get(stat, 0) + value
 
-    # Apply food
-    if selected_food:
-        stats = apply_food(stats, selected_food)
+    # Apply food stats
+    if food:
+        for stat, value in food.items():
+            final_stats[stat] = final_stats.get(stat, 0) + value
 
-    # Calculate GCD
-    stats['gcd'] = gcd_from_sps(stats.get("sps", 0))
+    return final_stats
 
-    # Compute DPS
-    stats['dps'] = compute_dps(stats)
+def calc_gcd(det, gcd_base=2.5):
+    """
+    Calculate GCD based on DET (Determination) stat.
+    Formula: GCD = gcd_base * 1000 / (1000 + DET)
+    """
+    return gcd_base * 1000 / (1000 + det)
 
-    return stats
+def calc_dps(stats, gcd=None, build_type="Crit"):
+    """
+    Simplified DPS calculation based on stats.
+    build_type can prioritize Crit or SPS (Spell Speed)
+    """
+    crit = stats.get("crit", 0)
+    dh = stats.get("dh", 0)
+    det = stats.get("det", 0)
+    sps = stats.get("sps", 0)
 
-def cap_stats(stats):
-    stats['crit'] = min(stats['crit'], 3600)
-    stats['dh'] = min(stats['dh'], 3500)
-    stats['det'] = min(stats['det'], 3500)
-    stats['sps'] = min(stats['sps'], 3600)
-    return stats
+    # Base DPS modifier
+    dps = 1.0 + (crit / 1000) + (dh / 1000) + (det / 1000)
+    
+    # If build_type is SPS, slightly weight GCD
+    if build_type.lower() == "spell speed" and gcd:
+        dps *= 2.5 / gcd  # faster GCD -> higher effective DPS
+
+    return dps
