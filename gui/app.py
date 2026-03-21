@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import json
 import os
 from engine.optimizer import run_solver
-from engine.loader import load_items, load_materia, load_foods
+from engine.data_loader import load_items
+from engine.food import load_foods
 
 BLACKLIST_FILE = "blacklist.txt"
 
@@ -14,14 +14,12 @@ class App:
         self.items_by_slot = items_by_slot
         self.foods = load_foods()
         self.blacklist = self.load_blacklist()
-        self.build_type = tk.StringVar(value="Crit")  # Default build type
-
+        self.build_type = tk.StringVar(value="Crit")
         self.min_ilvl = tk.IntVar(value=0)
         self.gcd = tk.DoubleVar(value=2.5)
         self.selected_food = tk.StringVar()
         if self.foods:
             self.selected_food.set(self.foods[0]['name'])
-
         self.create_gui()
 
     def load_blacklist(self):
@@ -68,7 +66,6 @@ class App:
         self.log_msg(f"[FILTER] Items after filter: {sum(len(v) for v in filtered_items.values())}")
         for slot, items in filtered_items.items():
             self.log_msg(f"[SLOT] {slot}: {len(items)} items")
-
         try:
             results = run_solver(
                 items_by_slot=filtered_items,
@@ -85,7 +82,6 @@ class App:
     def filter_items(self):
         filtered = {}
         for slot, items in self.items_by_slot.items():
-            # Remove blacklisted items
             filtered[slot] = [i for i in items if i['name'] not in self.blacklist and i['ilvl'] >= self.min_ilvl.get()]
         return filtered
 
