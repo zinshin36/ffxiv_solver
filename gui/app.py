@@ -1,87 +1,114 @@
-# gui/app.py
-
+import tkinter as tk
+from tkinter import ttk, messagebox
 import os
-import csv
-from engine.food_system import FoodSystem
+from engine.optimizer import run_solver
+from engine.data_loader import load_items
+from engine.food_system import load_foods, apply_food
 
-class BISApp:
-    def __init__(self, game_data_path="game_data"):
-        self.game_data_path = game_data_path
-        self.food_system = FoodSystem(os.path.join(game_data_path, "foods.json"))
-        self.items_by_slot = {}
-        self.materia_list = []
-        self.highest_ilvl = 0
-        self.load_game_data()
+BLACKLIST_FILE = "blacklist.txt"
 
-    def load_game_data(self):
-        self.load_items()
-        self.load_materia()
-        self.detect_highest_ilvl()
+class App:
+    def __init__(self, root, items_by_slot):
+        self.root = root
+        self.root.title("FFXIV BIS Solver")
+        self.items_by_slot = items_by_slot
+        self.foods = load_foods()
+        self.blacklist = self.load_blacklist()
+        self.build_type = tk.StringVar(value="Crit")  # default build type
+        self.min_ilvl = tk.IntVar(value=0)
+        self.gcd = tk.DoubleVar(value=2.5)
+        self.selected_food = tk.StringVar()
+        if self.foods:
+            self.selected_food.set(self.foods[0]['name'])
+        self.create_gui()
 
-    def load_items(self):
-        item_csv_path = os.path.join(self.game_data_path, "Item.csv")
-        if not os.path.exists(item_csv_path):
-            print(f"[ERROR] Item.csv not found at {item_csv_path}")
+    def load_blacklist(self):
+        if os.path.exists(BLACKLIST_FILE):
+            with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
+                return set(line.strip() for line in f if line.strip())
+        return set()
+
+    def create_gui(self):
+        frame = ttk.Frame(self.root)
+        frame.pack(padx=10, pady=10)
+
+        ttk.Label(frame, text="Min iLvl:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=self.min_ilvl).grid(row=0, column=1)
+
+        ttk.Label(frame, text="Target GCD:").grid(row=1, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=self.gcd).grid(row=1, column=1)
+
+        ttk.Label(frame, text="Food:").grid(row=2, column=0, sticky="w")
+        food_menu = ttk.OptionMenu(frame, self.selected_food, self.selected_food.get(),
+                                   *[f['name'] for f in self.foods])
+        food_menu.grid(row=2, column=1)
+
+        ttk.Label(frame, text="Build Type:").grid(row=3, column=0, sticky="w")
+        ttk.OptionMenu(frame, self.build_type, self.build_type.get(), "Crit", "Spell Speed").grid(row=3, column=1)
+
+        run_btn = ttk.Button(frame, text="Run Solver", command=self.run_solver_gui)
+        run_btn.grid(row=4, column=0, columnspan=2, pady=10)
+
+        self.log = tk.Text(self.root, height=25, width=100)
+        self.log.pack()
+
+    def log_msg(self, msg):
+        self.log.insert(tk.END, f"{msg}\n")
+        self.log.see(tk.END)
+        self.root.update_idletasks()
+
+    def run_solver_gui(self):
+        if not self.items_by_slot:
+            messagebox.showerror("Error", "No items loaded.")
             return
+        self.log_msg(f"[RUN] Min iLvl={self.min_ilvl.get()} | GCD={self.gcd.get()} | Food={self.selected_food.get()} | Build Type={self.build_type.get()}")
+        filtered_items = self.filter_items()
+        self.log_msg(f"[FILTER] Items after filter: {sum(len(v) for v in filtered_items.values())}")
+        for slot, items in filtered_items.items():
+            self.log_msg(f"[SLOT] {slot}: {len(items)} items")
 
-        with open(item_csv_path, newline="", encoding="utf-8") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                slot = row.get("Slot")
-                ilvl = int(row.get("ItemLevel", 0))
-                name = row.get("Name")
-                stats = {
-                    "crit": int(row.get("Crit", 0)),
-                    "dh": int(row.get("DirectHit", 0)),
-                    "det": int(row.get("Determination", 0)),
-                    "sps": int(row.get("SpellSpeed", 0))
-                }
-                if slot not in self.items_by_slot:
-                    self.items_by_slot[slot] = []
-                self.items_by_slot[slot].append({"name": name, "ilvl": ilvl, "stats": stats})
+        try:
+            results = run_solver(
+                items_by_slot=filtered_items,
+                min_ilvl=self.min_ilvl.get(),
+                target_gcd=self.gcd.get(),
+                build_type=self.build_type.get(),
+                selected_food=self.selected_food.get(),
+                blacklist=self.blacklist,
+            )
+            self.display_results(results)
+        except Exception as e:
+            self.log_msg(f"[CRASH DETECTED]\n{e}")
 
-    def load_materia(self):
-        materia_csv_path = os.path.join(self.game_data_path, "Materia.csv")
-        if not os.path.exists(materia_csv_path):
-            print(f"[WARNING] Materia.csv not found at {materia_csv_path}")
-            return
-
-        with open(materia_csv_path, newline="", encoding="utf-8") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                self.materia_list.append({
-                    "name": row.get("Name"),
-                    "stat": row.get("Stat"),
-                    "value": int(row.get("Value", 0))
-                })
-
-    def detect_highest_ilvl(self):
-        max_ilvl = 0
-        for slot_items in self.items_by_slot.values():
-            for item in slot_items:
-                if item["ilvl"] > max_ilvl:
-                    max_ilvl = item["ilvl"]
-        self.highest_ilvl = max_ilvl
-
-    def apply_food_to_stats(self, base_stats, food_name):
-        food_bonus = self.food_system.get_food_bonus(food_name)
-        return {
-            stat: base_stats.get(stat, 0) + food_bonus.get(stat, 0)
-            for stat in ["crit", "dh", "det", "sps"]
-        }
-
-    def filter_items(self, min_ilvl=780):
+    def filter_items(self):
         filtered = {}
         for slot, items in self.items_by_slot.items():
-            filtered[slot] = [item for item in items if item["ilvl"] >= min_ilvl]
+            filtered[slot] = [
+                i for i in items
+                if i['name'] not in self.blacklist and i['ilvl'] >= self.min_ilvl.get()
+            ]
         return filtered
 
-    def solve(self, min_ilvl=780, gcd=2.5, food="Popoto Potage", build_type="Crit"):
-        filtered_items = self.filter_items(min_ilvl)
-        print(f"[RUN] Min iLvl={min_ilvl} | GCD={gcd} | Food={food} | Build Type={build_type}")
-        # Example: sum base stats + food (real solver would apply materia combos)
-        for slot, items in filtered_items.items():
-            for item in items:
-                total_stats = self.apply_food_to_stats(item["stats"], food)
-                print(f"Slot: {slot}, Item: {item['name']}, Stats w/ Food: {total_stats}")
-        print(f"Highest iLvl detected: {self.highest_ilvl}")
+    def display_results(self, builds):
+        self.log_msg("===== RESULTS =====")
+        for i, build in enumerate(builds, 1):
+            self.log_msg(f"\n=== BUILD {i} ===")
+            self.log_msg(f"DPS: {build['dps']:.2f}")
+            self.log_msg(f"GCD: {build['gcd']:.3f}")
+            self.log_msg(f"CRIT: {build['crit']}  DH: {build['dh']}  DET: {build['det']}  SPS: {build['sps']}")
+            for slot in ["weapon","head","body","hands","legs","feet","earrings","necklace","bracelet","ring1","ring2"]:
+                item = build['items'][slot]
+                self.log_msg(f"{slot}: {item['name']}")
+                if item.get('melds'):
+                    melds = ', '.join([f"{k}+{v}" for k,v in item['melds'].items()])
+                    self.log_msg(f"  melds: {melds}")
+
+def main(items_by_slot=None):
+    if items_by_slot is None:
+        items_by_slot = load_items()
+    root = tk.Tk()
+    app = App(root, items_by_slot)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
