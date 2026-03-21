@@ -1,29 +1,29 @@
-def calculate_build_stats(build, food=None):
-    # Base example stats from your last message
-    base = {'hp':4862,'int':531,'crit':420,'dh':420,'det':440,'sps':420}
-    stats = base.copy()
+from engine.dps_model import compute_dps, gcd_from_sps
+from engine.food_system import apply_food
 
-    # Apply item stats + melds
+def calculate_build_stats(build, selected_food=None):
+    stats = {"crit":0, "dh":0, "det":0, "sps":0, "int":531}  # base int for BLM
+
+    # Apply items and melds
     for item in build.values():
-        for k,v in item.get('stats', {}).items():
-            stats[k] += v
-        for k,v in item.get('melds', {}).items():
-            stats[k] += v
+        for k,v in item.get("stats", {}).items():
+            stats[k] = stats.get(k, 0) + v
+        for k,v in item.get("melds", {}).items():
+            stats[k] = stats.get(k, 0) + v
 
     # Apply food
-    if food:
-        for k,v in food.get('stats', {}).items():
-            stats[k] += v
+    if selected_food:
+        stats = apply_food(stats, selected_food)
 
-    # GCD calc
-    stats['gcd'] = 2.5  # placeholder, calculate from sps if needed
+    # Calculate GCD
+    stats['gcd'] = gcd_from_sps(stats.get("sps", 0))
 
-    # DPS formula placeholder
-    stats['dps'] = stats['crit']*10 + stats['dh']*5 + stats['sps']*3
+    # Compute DPS
+    stats['dps'] = compute_dps(stats)
+
     return stats
 
 def cap_stats(stats):
-    # Cap stats based on FFXIV limits
     stats['crit'] = min(stats['crit'], 3600)
     stats['dh'] = min(stats['dh'], 3500)
     stats['det'] = min(stats['det'], 3500)
