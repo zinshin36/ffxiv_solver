@@ -1,50 +1,35 @@
-def apply_food_stats(base_stats, food_stats):
-    """
-    Apply food bonuses to base stats.
-    base_stats: dict with keys "crit", "dh", "det", "sps"
-    food_stats: dict with same keys
-    Returns a new dict with combined stats
-    """
-    result = base_stats.copy()
-    for stat, value in food_stats.items():
-        if stat in result:
-            result[stat] += value
-        else:
-            result[stat] = value
-    return result
+from engine.blm_math import gcd_from_sps
 
-def compute_gcd(gcd_base, det):
-    """
-    Compute actual GCD based on DET stat
-    Example formula: gcd = gcd_base * (1000 / (1000 + det))
-    """
-    return gcd_base * (1000 / (1000 + det))
+# DPS weights
+STAT_WEIGHTS_CRIT = {"crit": 1.0, "dh": 0.9, "det": 0.8, "sps": 0.7}
+STAT_WEIGHTS_SPS = {"crit": 0.9, "dh": 0.8, "det": 0.7, "sps": 1.0}
 
-def compute_dps(stats, gcd, build_type="Crit"):
-    """
-    Simplified DPS calculation for the purpose of the solver.
-    stats: dict containing crit, dh, det, sps
-    gcd: float, current gcd
-    build_type: string, "Crit" or "Spell Speed"
-    Returns DPS float
-    """
-    crit = stats.get("crit", 0)
-    dh = stats.get("dh", 0)
-    det = stats.get("det", 0)
-    sps = stats.get("sps", 0)
+def calculate_build_stats(build, food=None, build_type="Crit"):
+    stats = {"crit": 0, "dh": 0, "det": 0, "sps": 0, "int": 531}  # default base INT
 
-    # Base multipliers (can tweak for balance)
-    base_dps = 1000
+    # add item stats + melds
+    for item in build.values():
+        for k, v in item.get("stats", {}).items():
+            stats[k] = stats.get(k, 0) + v
+        for k, v in item.get("melds", {}).items():
+            stats[k] = stats.get(k, 0) + v
 
-    # DPS contribution formula (simplified)
-    crit_factor = 1 + crit / 1000
-    dh_factor = 1 + dh / 1000
-    det_factor = 1 + det / 1000
-    sps_factor = 1 + sps / 1000
+    # apply food
+    if food:
+        for k, v in food.get("stats", {}).items():
+            stats[k] = stats.get(k, 0) + v
 
-    if build_type.lower() == "crit":
-        dps = base_dps * crit_factor * dh_factor * det_factor / gcd
-    else:  # Spell Speed focus
-        dps = base_dps * sps_factor * dh_factor * det_factor / gcd
+    # GCD from SPS
+    stats["gcd"] = gcd_from_sps(stats.get("sps", 0))
 
-    return dps
+    # DPS calculation based on build type
+    weights = STAT_WEIGHTS_CRIT if build_type.lower() == "crit" else STAT_WEIGHTS_SPS
+    stats["dps"] = sum(stats.get(k, 0) * w for k, w in weights.items())
+    return stats
+
+def cap_stats(stats):
+    stats['crit'] = min(stats.get('crit', 0), 3600)
+    stats['dh'] = min(stats.get('dh', 0), 3500)
+    stats['det'] = min(stats.get('det', 0), 3500)
+    stats['sps'] = min(stats.get('sps', 0), 3600)
+    return stats
